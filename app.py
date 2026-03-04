@@ -25,6 +25,7 @@ from wordcloud import WordCloud
 import qrcode
 from PIL import Image
 from deep_translator import GoogleTranslator
+import random
 
 # ===== NLTK DOWNLOAD =====
 try:
@@ -42,70 +43,167 @@ except:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-st.set_page_config(page_title="Advanced Text Summarizer", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="Audio to Text Summarizer Using NLP", page_icon="🎤", layout="wide")
 
-# Custom CSS
+# ===== CUSTOM CSS WITH NEW BACKGROUND =====
 st.markdown("""
 <style>
+    /* Main background gradient */
+    .stApp {
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        color: white;
+    }
+    
+    /* Main header */
     .main-header {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: linear-gradient(135deg, #ff6b6b, #556270);
         padding: 2rem;
         border-radius: 15px;
         color: white;
         text-align: center;
         margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.1);
     }
+    .main-header h1 {
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    /* Section cards */
     .section-card {
-        background: white;
+        background: rgba(255,255,255,0.1);
+        backdrop-filter: blur(10px);
         padding: 1.5rem;
         border-radius: 10px;
-        border-left: 5px solid #667eea;
+        border-left: 5px solid #ff6b6b;
         margin: 1rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        color: white;
     }
+    
+    /* Keyword tags */
     .keyword-tag {
-        background: #667eea;
+        background: linear-gradient(135deg, #ff6b6b, #556270);
         color: white;
         padding: 0.3rem 0.8rem;
         border-radius: 20px;
         display: inline-block;
         margin: 0.2rem;
         font-size: 0.9rem;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
+    
+    /* Metric boxes */
     .metric-box {
-        background: white;
+        background: rgba(255,255,255,0.1);
+        backdrop-filter: blur(5px);
         padding: 1rem;
         border-radius: 8px;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid rgba(255,255,255,0.2);
+        color: white;
     }
+    
+    /* Buttons */
     .stButton > button {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: linear-gradient(135deg, #ff6b6b, #556270);
         color: white;
         border: none;
         padding: 0.5rem 1.5rem;
         border-radius: 25px;
         font-weight: bold;
         width: 100%;
+        border: 1px solid rgba(255,255,255,0.2);
+        transition: all 0.3s ease;
     }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(255,107,107,0.4);
+    }
+    
+    /* Slider container */
     .slider-container {
-        background: #f0f2f6;
+        background: rgba(255,255,255,0.1);
+        backdrop-filter: blur(5px);
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
+        border: 1px solid rgba(255,255,255,0.2);
     }
+    
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+        background: rgba(255,255,255,0.1);
+        padding: 0.5rem;
+        border-radius: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: white;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #ff6b6b, #556270);
+    }
+    
+    /* Success messages */
     .success-msg {
-        background: #d4edda;
-        color: #155724;
+        background: rgba(40, 167, 69, 0.2);
+        color: #d4edda;
         padding: 0.5rem;
         border-radius: 5px;
         text-align: center;
         margin: 0.5rem 0;
+        border: 1px solid #28a745;
+    }
+    
+    /* Info messages */
+    .info-msg {
+        background: rgba(23, 162, 184, 0.2);
+        color: #d1ecf1;
+        padding: 0.5rem;
+        border-radius: 5px;
+        border: 1px solid #17a2b8;
+    }
+    
+    /* Chatbot section */
+    .chat-container {
+        background: rgba(255,255,255,0.05);
+        border-radius: 10px;
+        padding: 1rem;
+        border: 1px solid rgba(255,255,255,0.1);
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .user-message {
+        background: linear-gradient(135deg, #ff6b6b, #556270);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 15px 15px 0 15px;
+        margin: 0.5rem 0;
+        text-align: right;
+    }
+    .bot-message {
+        background: rgba(255,255,255,0.1);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 15px 15px 15px 0;
+        margin: 0.5rem 0;
+        text-align: left;
+        border: 1px solid rgba(255,255,255,0.2);
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>🚀 Advanced Text Summarizer Using NLP</h1><p>Video | Audio | PDF | Text | URL | YouTube | AI Features</p></div>", unsafe_allow_html=True)
+# ===== HEADER WITH NEW TITLE =====
+st.markdown("""
+<div class='main-header'>
+    <h1>🎤 Audio to Text Summarizer Using NLP</h1>
+    <p style='font-size: 1.2rem; opacity: 0.9;'>Transform Audio | Video | PDF | Text | URL into Smart Summaries</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ===== SESSION STATE INITIALIZATION =====
 if 'assemblyai_key' not in st.session_state:
@@ -126,12 +224,22 @@ if 'qr_code' not in st.session_state:
     st.session_state.qr_code = None
 if 'wordcloud_fig' not in st.session_state:
     st.session_state.wordcloud_fig = None
+if 'show_wordcloud' not in st.session_state:
+    st.session_state.show_wordcloud = False
+if 'show_qr' not in st.session_state:
+    st.session_state.show_qr = False
+if 'show_translation' not in st.session_state:
+    st.session_state.show_translation = False
+if 'show_comparison' not in st.session_state:
+    st.session_state.show_comparison = False
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
 
-# ===== SIDEBAR =====
+# ===== SIDEBAR WITH NEW ICONS =====
 with st.sidebar:
-    st.markdown("### 🔑 API Configuration")
+    st.markdown("### 🔐 API Configuration")
     assembly_key = st.text_input(
-        "AssemblyAI Key",
+        "🗝️ AssemblyAI Key",
         value=st.session_state.assemblyai_key,
         type="password"
     )
@@ -140,16 +248,19 @@ with st.sidebar:
         st.success("✅ Keys saved!")
     
     st.markdown("---")
-    st.markdown("### 📌 Supported")
-    st.markdown("🎥 Video: MP4, AVI, MOV")
-    st.markdown("🎵 Audio: MP3, WAV, M4A")
-    st.markdown("📄 PDF, TXT")
-    st.markdown("🌐 URLs")
-    st.markdown("▶️ YouTube")
+    st.markdown("### 📌 Supported Formats")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("🎥 **Video**\n- MP4\n- AVI\n- MOV")
+        st.markdown("🎵 **Audio**\n- MP3\n- WAV\n- M4A")
+    with col2:
+        st.markdown("📄 **Document**\n- PDF\n- TXT")
+        st.markdown("🌐 **Online**\n- URLs\n- YouTube")
     
     st.markdown("---")
     
-    # History viewer
+    # History viewer with new icon
     if st.session_state.history:
         with st.expander("📜 Recent History"):
             for i, item in enumerate(st.session_state.history[-5:]):
@@ -302,12 +413,12 @@ def text_to_speech(text):
     except:
         return None
 
-# ===== WORD CLOUD GENERATION (No Refresh) =====
+# ===== WORD CLOUD GENERATION =====
 def create_wordcloud(text):
     try:
         wordcloud = WordCloud(width=800, height=400, 
                             background_color='white',
-                            colormap='viridis').generate(text)
+                            colormap='plasma').generate(text)
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.imshow(wordcloud, interpolation='bilinear')
         ax.axis('off')
@@ -315,13 +426,13 @@ def create_wordcloud(text):
     except:
         return None
 
-# ===== QR CODE GENERATION (No Refresh) =====
+# ===== QR CODE GENERATION =====
 def generate_qr(text):
     try:
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(text[:200])
         qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
+        img = qr.make_image(fill_color="#ff6b6b", back_color="white")
         
         img_bytes = io.BytesIO()
         img.save(img_bytes, format='PNG')
@@ -330,7 +441,7 @@ def generate_qr(text):
     except:
         return None
 
-# ===== TRANSLATION (No Refresh) =====
+# ===== TRANSLATION =====
 def translate_summary(text, dest='te'):
     try:
         translator = GoogleTranslator(source='auto', target=dest)
@@ -338,6 +449,64 @@ def translate_summary(text, dest='te'):
         return result
     except:
         return None
+
+# ===== AI CHATBOT =====
+def get_chatbot_response(user_input, context=""):
+    """AI Chatbot that responds based on user input and context"""
+    user_input = user_input.lower()
+    
+    # Greetings
+    if any(word in user_input for word in ['hello', 'hi', 'hey', 'namaste']):
+        responses = [
+            "👋 Hello! How can I help you today?",
+            "🙏 Namaste! How can I assist you?",
+            "👋 Hi there! Feel free to ask me anything about your summaries."
+        ]
+        return random.choice(responses)
+    
+    # About summary
+    elif any(word in user_input for word in ['summary', 'summarize', 'summarization']):
+        if context:
+            return f"📝 Your current summary is: {context[:200]}... You can adjust the length using the slider above."
+        else:
+            return "📝 I can help you understand your summary better. You can ask me specific questions about the content."
+    
+    # Keywords
+    elif any(word in user_input for word in ['keyword', 'keywords', 'topics', 'main']):
+        return "🔑 Keywords are the most frequent important words in your text. They appear as colored tags below the summary."
+    
+    # Word Cloud
+    elif any(word in user_input for word in ['word cloud', 'cloud', 'visual']):
+        return "☁️ Word Cloud is a visual representation of keywords. Bigger words appear more frequently in your text."
+    
+    # QR Code
+    elif any(word in user_input for word in ['qr', 'qrcode', 'scan']):
+        return "📱 QR Code lets you share your summary on mobile. Just scan it with your phone camera!"
+    
+    # Translation
+    elif any(word in user_input for word in ['translate', 'telugu', 'hindi', 'language']):
+        return "🌐 You can translate your summary to Telugu, Hindi, Tamil, Kannada, or Malayalam using the Translate feature."
+    
+    # Audio
+    elif any(word in user_input for word in ['audio', 'listen', 'speak', 'voice']):
+        return "🔊 You can listen to your summary by clicking the Audio download button. It converts text to speech."
+    
+    # Download
+    elif any(word in user_input for word in ['download', 'save', 'export']):
+        return "📥 You can download the full text, summary, or audio using the download buttons below."
+    
+    # Help
+    elif any(word in user_input for word in ['help', 'how to', 'guide', 'tutorial']):
+        return "ℹ️ Check the Help tab for detailed instructions on how to use all features of this app."
+    
+    # Default responses
+    else:
+        responses = [
+            "🤔 I'm not sure I understand. You can ask me about summary, keywords, word cloud, QR code, translation, or download features.",
+            "💡 Try asking about 'summary', 'keywords', 'word cloud', or 'how to use'.",
+            "🤖 I can help with understanding your summary and app features. What would you like to know?"
+        ]
+        return random.choice(responses)
 
 # ===== GENERATE SUMMARY =====
 def generate_summary(text, num_points):
@@ -363,7 +532,7 @@ def generate_summary(text, num_points):
     top_indices = sorted(sentence_scores, key=sentence_scores.get, reverse=True)[:num_points]
     top_indices.sort()
     
-    summary = f"📌 **MAIN POINTS ({num_points} of {len(sentences)} sentences)**\n\n"
+    summary = f"🎯 **KEY POINTS ({num_points} of {len(sentences)} sentences)**\n\n"
     for i, idx in enumerate(top_indices, 1):
         summary += f"{i}. {sentences[idx]}\n\n"
     
@@ -394,7 +563,7 @@ def display_results(text, source_name):
         else:
             max_val = min(30, total_sentences)
             num_points = st.slider(
-                "Number of summary sentences:",
+                "📊 Number of summary sentences:",
                 min_value=3,
                 max_value=max_val,
                 value=st.session_state.slider_value,
@@ -410,7 +579,7 @@ def display_results(text, source_name):
     if total_sentences <= num_points:
         summary = text
         summary_words = original_words
-        st.info(f"ℹ️ Text has only {total_sentences} sentences. Showing full text.")
+        st.info("ℹ️ Text has only {} sentences. Showing full text.".format(total_sentences))
     else:
         summary = generate_summary(text, num_points)
         summary_words = len(summary.split())
@@ -434,28 +603,29 @@ def display_results(text, source_name):
     })
     
     # Display summary
-    st.markdown("## 📋 Summary")
+    st.markdown("## 📝 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    # Statistics
+    # Statistics with different icons
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Characters", f"{original_chars:,}")
+        st.metric("📊 Characters", f"{original_chars:,}")
     with col2:
-        st.metric("Words", f"{original_words:,}")
+        st.metric("📈 Words", f"{original_words:,}")
     with col3:
-        st.metric("Sentences", f"{total_sentences:,}")
+        st.metric("🔤 Sentences", f"{total_sentences:,}")
     with col4:
-        st.metric("Reduced", f"{reduction}%")
+        st.metric("📉 Reduced", f"{reduction}%")
     
-    # Reading Time
+    # Reading Time with different icon
     minutes = original_words // 200
     seconds = int((original_words % 200) / 200 * 60)
-    st.metric("⏱️ Reading Time", f"{minutes} min {seconds} sec")
+    st.metric("⏳ Reading Time", f"{minutes} min {seconds} sec")
     
-    # Advanced Features Section
+    # ===== ADVANCED FEATURES WITH DIFFERENT ICONS =====
     st.markdown("### 🚀 Advanced Features")
     
+    # Create 5 columns with different icons
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
@@ -464,13 +634,15 @@ def display_results(text, source_name):
                 fig = create_wordcloud(text)
                 if fig:
                     st.session_state.wordcloud_fig = fig
+                    st.session_state.show_wordcloud = True
     
     with col2:
-        if st.button("🔗 QR Code", key="qr_btn"):
+        if st.button("📱 QR Code", key="qr_btn"):
             with st.spinner("Generating QR code..."):
                 qr_img = generate_qr(summary)
                 if qr_img:
                     st.session_state.qr_code = qr_img
+                    st.session_state.show_qr = True
     
     with col3:
         if st.button("🌐 Translate", key="trans_btn"):
@@ -478,39 +650,39 @@ def display_results(text, source_name):
                 translated = translate_summary(summary, 'te')
                 if translated:
                     st.session_state.translated_text = translated
+                    st.session_state.show_translation = True
     
     with col4:
-        title = st.text_input("Title", value="My Summary", key="fav_title", label_visibility="collapsed")
         if st.button("⭐ Add Favorite", key="fav_btn"):
             st.session_state.favorites.append({
-                'title': title,
+                'title': f"Summary {len(st.session_state.favorites) + 1}",
                 'summary': summary,
                 'time': datetime.now().strftime("%Y-%m-%d %H:%M")
             })
             st.success("✅ Added to favorites!")
     
     with col5:
-        if st.button("📊 Compare", key="comp_btn"):
+        if st.button("🔄 Compare", key="comp_btn"):
             st.session_state.show_comparison = True
     
-    # Display generated content
-    if st.session_state.get('wordcloud_fig'):
+    # Show generated content
+    if st.session_state.get('show_wordcloud') and st.session_state.get('wordcloud_fig'):
         st.pyplot(st.session_state.wordcloud_fig)
-        if st.button("Clear Word Cloud", key="clear_wc"):
-            st.session_state.wordcloud_fig = None
+        if st.button("❌ Close Word Cloud", key="close_wc"):
+            st.session_state.show_wordcloud = False
             st.rerun()
     
-    if st.session_state.get('qr_code'):
+    if st.session_state.get('show_qr') and st.session_state.get('qr_code'):
         st.image(st.session_state.qr_code, caption="Scan to share summary", width=200)
-        if st.button("Clear QR", key="clear_qr"):
-            st.session_state.qr_code = None
+        if st.button("❌ Close QR", key="close_qr"):
+            st.session_state.show_qr = False
             st.rerun()
     
-    if st.session_state.get('translated_text'):
-        st.success(f"**Telugu Translation:**")
+    if st.session_state.get('show_translation') and st.session_state.get('translated_text'):
+        st.success("**Telugu Translation:**")
         st.info(st.session_state.translated_text)
-        if st.button("Clear Translation", key="clear_trans"):
-            st.session_state.translated_text = None
+        if st.button("❌ Close Translation", key="close_trans"):
+            st.session_state.show_translation = False
             st.rerun()
     
     if st.session_state.get('show_comparison'):
@@ -523,7 +695,7 @@ def display_results(text, source_name):
             st.markdown("**🔸 Long (7 sentences)**")
             long_summary = generate_summary(text, 7)
             st.info(long_summary[:200] + "..." if len(long_summary) > 200 else long_summary)
-        if st.button("Close Comparison", key="close_comp"):
+        if st.button("❌ Close Comparison", key="close_comp"):
             st.session_state.show_comparison = False
             st.rerun()
     
@@ -555,9 +727,45 @@ def display_results(text, source_name):
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
 
+# ===== AI CHATBOT SECTION =====
+def display_chatbot():
+    st.markdown("### 🤖 AI Assistant")
+    
+    # Chat container
+    chat_container = st.container()
+    
+    with chat_container:
+        # Display chat history
+        for message in st.session_state.chat_history:
+            if message['role'] == 'user':
+                st.markdown(f"<div class='user-message'>👤 {message['content']}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='bot-message'>🤖 {message['content']}</div>", unsafe_allow_html=True)
+    
+    # Chat input
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        user_input = st.text_input("", placeholder="Ask me anything...", key="chat_input")
+    with col2:
+        send_button = st.button("📤 Send", key="send_btn")
+    
+    if send_button and user_input:
+        # Add user message
+        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
+        
+        # Get bot response with context
+        context = st.session_state.get('current_summary', '')
+        bot_response = get_chatbot_response(user_input, context)
+        
+        # Add bot response
+        st.session_state.chat_history.append({'role': 'bot', 'content': bot_response})
+        
+        # Clear input and rerun
+        st.rerun()
+
 # ===== MAIN UI =====
 def main():
-    tab1, tab2, tab3, tab4 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "ℹ️ Help"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "🤖 AI Chat", "ℹ️ Help"])
     
     with tab1:
         uploaded_file = st.file_uploader(
@@ -635,26 +843,30 @@ def main():
                 st.warning("Text too short")
     
     with tab4:
+        display_chatbot()
+    
+    with tab5:
         st.markdown("""
         <div class='section-card'>
             <h3>📌 How to Use</h3>
             <ol>
-                <li>Get AssemblyAI Key from assemblyai.com</li>
-                <li>Upload file or paste URL</li>
-                <li>Adjust slider for summary length</li>
-                <li>Try advanced features - they won't refresh the page!</li>
-                <li>Download text/summary/audio</li>
+                <li><strong>Get API Key:</strong> Sign up at <a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> (Free)</li>
+                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
+                <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
+                <li><strong>Try Features:</strong> Word Cloud, QR Code, Translation, Compare</li>
+                <li><strong>Ask AI:</strong> Use the AI Chat tab to ask questions</li>
+                <li><strong>Download:</strong> Get text, summary, or audio</li>
             </ol>
             
             <h3>✨ Features</h3>
             <ul>
-                <li>✅ <strong>No Refresh</strong> - Buttons won't reload page</li>
-                <li>✅ <strong>Word Cloud</strong> - Visual keywords</li>
-                <li>✅ <strong>QR Code</strong> - Share on mobile</li>
-                <li>✅ <strong>Translation</strong> - Telugu support</li>
-                <li>✅ <strong>Favorites</strong> - Save summaries</li>
-                <li>✅ <strong>Comparison</strong> - 3 vs 7 sentences</li>
-                <li>✅ <strong>History</strong> - Recent summaries</li>
+                <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
+                <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
+                <li>☁️ <strong>Word Cloud</strong> - Visual keywords</li>
+                <li>📱 <strong>QR Code</strong> - Share on mobile</li>
+                <li>🌐 <strong>Translation</strong> - Telugu, Hindi, Tamil</li>
+                <li>🤖 <strong>AI Chatbot</strong> - Ask questions about your summary</li>
+                <li>📥 <strong>Download</strong> - Text, summary, audio</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
