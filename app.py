@@ -45,13 +45,10 @@ except:
 
 # ===== CONFIGURE GEMINI AI =====
 try:
-    # Try to get from secrets first, then from session state
     if 'GEMINI_API_KEY' in st.secrets:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     elif 'gemini_key' in st.session_state and st.session_state.gemini_key:
         genai.configure(api_key=st.session_state.gemini_key)
-    else:
-        st.warning("⚠️ Gemini API key not configured. Chatbot will use basic responses.")
 except:
     pass
 
@@ -60,17 +57,12 @@ st.set_page_config(page_title="Audio to Text Summarizer Using NLP", page_icon="�
 # ===== CUSTOM CSS WITH DARK BACKGROUND =====
 st.markdown("""
 <style>
-    /* Main background - DARK GRADIENT */
     .stApp {
         background: linear-gradient(135deg, #0f0c29, #302b63, #24243e) !important;
     }
-    
-    /* All text white */
     .stApp, .stMarkdown, p, h1, h2, h3, h4, h5, h6, label, .stTextInput label, .stSelectbox label {
         color: white !important;
     }
-    
-    /* Main header */
     .main-header {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
         padding: 2rem !important;
@@ -80,8 +72,6 @@ st.markdown("""
         margin-bottom: 2rem !important;
         box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
     }
-    
-    /* Section cards */
     .section-card {
         background: rgba(255,255,255,0.1) !important;
         backdrop-filter: blur(10px) !important;
@@ -91,8 +81,6 @@ st.markdown("""
         margin: 1rem 0 !important;
         color: white !important;
     }
-    
-    /* Keyword tags */
     .keyword-tag {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
         color: white !important;
@@ -101,8 +89,6 @@ st.markdown("""
         display: inline-block !important;
         margin: 0.2rem !important;
     }
-    
-    /* Metric boxes */
     .metric-box {
         background: rgba(255,255,255,0.1) !important;
         backdrop-filter: blur(5px) !important;
@@ -111,8 +97,6 @@ st.markdown("""
         border: 1px solid rgba(255,255,255,0.2) !important;
         color: white !important;
     }
-    
-    /* Buttons */
     .stButton > button {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
         color: white !important;
@@ -121,54 +105,37 @@ st.markdown("""
         border-radius: 25px !important;
         font-weight: bold !important;
         width: 100% !important;
-        transition: all 0.3s ease !important;
     }
     .stButton > button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 5px 15px rgba(255,107,107,0.4) !important;
     }
-    
-    /* Text inputs */
     .stTextInput > div > div > input {
         background: rgba(255,255,255,0.1) !important;
         color: white !important;
         border: 1px solid rgba(255,255,255,0.2) !important;
-        border-radius: 8px !important;
     }
-    
-    /* Text area */
     .stTextArea textarea {
         background: rgba(255,255,255,0.1) !important;
         color: white !important;
         border: 1px solid rgba(255,255,255,0.2) !important;
-        border-radius: 8px !important;
     }
-    
-    /* Slider */
     .slider-container {
         background: rgba(255,255,255,0.1) !important;
         padding: 1rem !important;
         border-radius: 10px !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
     }
-    
-    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
         background: rgba(255,255,255,0.1) !important;
         padding: 0.5rem !important;
         border-radius: 10px !important;
-        gap: 0.5rem !important;
     }
     .stTabs [data-baseweb="tab"] {
         color: white !important;
-        border-radius: 8px !important;
-        padding: 0.5rem 1rem !important;
     }
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
     }
-    
-    /* Chat messages */
     .user-message {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
         color: white !important;
@@ -199,10 +166,7 @@ st.markdown("""
         min-height: 400px !important;
         max-height: 500px !important;
         overflow-y: auto !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
     }
-    
-    /* Success messages */
     .success-msg {
         background: rgba(40, 167, 69, 0.2) !important;
         color: #d4edda !important;
@@ -210,8 +174,6 @@ st.markdown("""
         border-radius: 5px !important;
         border: 1px solid #28a745 !important;
     }
-    
-    /* Info messages */
     .info-msg {
         background: rgba(23, 162, 184, 0.2) !important;
         color: #d1ecf1 !important;
@@ -219,8 +181,6 @@ st.markdown("""
         border-radius: 5px !important;
         border: 1px solid #17a2b8 !important;
     }
-    
-    /* Scrollbar */
     ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -317,7 +277,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # History viewer
     if st.session_state.history:
         with st.expander("📜 Recent History"):
             for i, item in enumerate(st.session_state.history[-5:]):
@@ -329,19 +288,15 @@ with st.sidebar:
 
 # ===== GEMINI AI RESPONSE FUNCTION =====
 def get_gemini_response(user_input, context=""):
-    """Real AI response using Google Gemini"""
     try:
-        # Check if Gemini is configured
         if not st.session_state.gemini_key and 'GEMINI_API_KEY' not in st.secrets:
             return "⚠️ Please configure your Google Gemini API key in the sidebar to use the AI chatbot."
         
-        # Configure if needed
         if st.session_state.gemini_key:
             genai.configure(api_key=st.session_state.gemini_key)
         
         model = genai.GenerativeModel('gemini-pro')
         
-        # Create prompt with context
         prompt = f"""You are an AI assistant for a Text Summarizer app called "Audio to Text Summarizer Using NLP".
 The app can summarize audio, video, PDF, URLs, and text using NLP techniques.
 
@@ -419,7 +374,6 @@ def extract_youtube_content(url):
         if not video_id:
             return None, None, None
         
-        # Try transcript first
         try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             for lang in ['te', 'en', 'hi']:
@@ -438,7 +392,6 @@ def extract_youtube_content(url):
         except:
             pass
         
-        # Fallback to description
         with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
             info = ydl.extract_info(url, download=False)
             title = info.get('title', 'YouTube Video')
@@ -585,15 +538,12 @@ def display_results(text, source_name):
         st.error("No text to display")
         return
     
-    # Store text in session state
     st.session_state.current_text = text
     
-    # Calculate statistics
     total_sentences = len(nltk.sent_tokenize(text))
     original_words = len(text.split())
     original_chars = len(text)
     
-    # Slider
     st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
     col1, col2 = st.columns([3, 1])
     
@@ -616,7 +566,6 @@ def display_results(text, source_name):
         st.metric("Total", total_sentences)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Generate summary
     if total_sentences <= num_points:
         summary = text
         summary_words = original_words
@@ -625,16 +574,13 @@ def display_results(text, source_name):
         summary = generate_summary(text, num_points)
         summary_words = len(summary.split())
     
-    # Store summary
     st.session_state.current_summary = summary
     
-    # Calculate reduction
     if original_words > 0 and summary_words < original_words:
         reduction = int((1 - summary_words/original_words) * 100)
     else:
         reduction = 0
     
-    # Add to history
     st.session_state.history.append({
         'time': datetime.now().strftime("%Y-%m-%d %H:%M"),
         'source': source_name,
@@ -643,11 +589,9 @@ def display_results(text, source_name):
         'full_summary': summary
     })
     
-    # Display summary
     st.markdown("## 📝 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    # Statistics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("📊 Characters", f"{original_chars:,}")
@@ -658,12 +602,10 @@ def display_results(text, source_name):
     with col4:
         st.metric("📉 Reduced", f"{reduction}%")
     
-    # Reading Time
     minutes = original_words // 200
     seconds = int((original_words % 200) / 200 * 60)
     st.metric("⏳ Reading Time", f"{minutes} min {seconds} sec")
     
-    # ===== ADVANCED FEATURES =====
     st.markdown("### 🚀 Advanced Features")
     
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -705,7 +647,6 @@ def display_results(text, source_name):
         if st.button("🔄 Compare", key="comp_btn"):
             st.session_state.show_comparison = True
     
-    # Show generated content
     if st.session_state.get('show_wordcloud') and st.session_state.get('wordcloud_fig'):
         st.pyplot(st.session_state.wordcloud_fig)
         if st.button("❌ Close Word Cloud", key="close_wc"):
@@ -739,7 +680,6 @@ def display_results(text, source_name):
             st.session_state.show_comparison = False
             st.rerun()
     
-    # Downloads
     st.markdown("### 📥 Downloads")
     col1, col2, col3 = st.columns(3)
     
@@ -755,7 +695,6 @@ def display_results(text, source_name):
             st.audio(audio, format='audio/mp3')
             st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3", "audio/mp3")
     
-    # Keywords
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
     if words:
         keywords = Counter(words).most_common(15)
@@ -771,17 +710,14 @@ def display_results(text, source_name):
 def display_chatbot():
     st.markdown("### 🤖 AI Assistant (Powered by Google Gemini)")
     
-    # Gemini key status
     if not st.session_state.gemini_key and 'GEMINI_API_KEY' not in st.secrets:
         st.warning("⚠️ Please add your Google Gemini API key in the sidebar to use the AI chatbot.")
     
-    # Chat container
     chat_container = st.container()
     
     with chat_container:
         st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
         
-        # Display chat history
         for message in st.session_state.chat_history:
             if message['role'] == 'user':
                 st.markdown(f"<div class='user-message'>👤 {message['content']}</div>", unsafe_allow_html=True)
@@ -790,7 +726,6 @@ def display_chatbot():
         
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # Chat input
     col1, col2 = st.columns([5, 1])
     with col1:
         user_input = st.text_input("", placeholder="Ask me anything about your summary or the app...", key="chat_input")
@@ -798,21 +733,15 @@ def display_chatbot():
         send_button = st.button("📤 Send", key="send_btn")
     
     if send_button and user_input:
-        # Add user message
         st.session_state.chat_history.append({'role': 'user', 'content': user_input})
         
-        # Get AI response
         context = st.session_state.get('current_summary', '')
         with st.spinner("🤔 Thinking..."):
             bot_response = get_gemini_response(user_input, context)
         
-        # Add bot response
         st.session_state.chat_history.append({'role': 'bot', 'content': bot_response})
-        
-        # Clear input and rerun
         st.rerun()
     
-    # Clear chat button
     if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="clear_chat"):
         st.session_state.chat_history = []
         st.rerun()
@@ -900,41 +829,44 @@ def main():
         display_chatbot()
     
     with tab5:
-    st.markdown("""
-    <div class='section-card'>
-        <h3>📌 How to Use</h3>
-        <ol>
-            <li><strong>Get API Keys:</strong>
-                <ul>
-                    <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
-                    <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
-                </ul>
-            </li>
-            <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
-            <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
-            <li><strong>Try Features:</strong> Word Cloud, QR Code, Translation, Compare</li>
-            <li><strong>Ask AI:</strong> Use the AI Chat tab for questions</li>
-            <li><strong>Download:</strong> Get text, summary, or audio</li>
-        </ol>
-        
-        <h3>✨ Features</h3>
-        <ul>
-            <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
-            <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
-            <li>☁️ <strong>Word Cloud</strong> - Visual keywords</li>
-            <li>📱 <strong>QR Code</strong> - Share on mobile</li>
-            <li>🌐 <strong>Translation</strong> - Telugu, Hindi, Tamil</li>
-            <li>🤖 <strong>AI Chatbot</strong> - Ask questions (requires Gemini key)</li>
-            <li>📥 <strong>Download</strong> - Text, summary, audio</li>
-        </ul>
-        
-        <h3>🎯 Supported Formats</h3>
-        <ul>
-            <li>🎥 Video: MP4, AVI, MOV</li>
-            <li>🎵 Audio: MP3, WAV, M4A</li>
-            <li>📄 Document: PDF, TXT</li>
-            <li>🌐 Online: URLs, YouTube</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
-        
+        # ===== FIXED INDENTATION HERE =====
+        st.markdown("""
+        <div class='section-card'>
+            <h3>📌 How to Use</h3>
+            <ol>
+                <li><strong>Get API Keys:</strong>
+                    <ul>
+                        <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
+                        <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
+                    </ul>
+                </li>
+                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
+                <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
+                <li><strong>Try Features:</strong> Word Cloud, QR Code, Translation, Compare</li>
+                <li><strong>Ask AI:</strong> Use the AI Chat tab for questions</li>
+                <li><strong>Download:</strong> Get text, summary, or audio</li>
+            </ol>
+            
+            <h3>✨ Features</h3>
+            <ul>
+                <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
+                <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
+                <li>☁️ <strong>Word Cloud</strong> - Visual keywords</li>
+                <li>📱 <strong>QR Code</strong> - Share on mobile</li>
+                <li>🌐 <strong>Translation</strong> - Telugu, Hindi, Tamil</li>
+                <li>🤖 <strong>AI Chatbot</strong> - Ask questions (requires Gemini key)</li>
+                <li>📥 <strong>Download</strong> - Text, summary, audio</li>
+            </ul>
+            
+            <h3>🎯 Supported Formats</h3>
+            <ul>
+                <li>🎥 Video: MP4, AVI, MOV</li>
+                <li>🎵 Audio: MP3, WAV, M4A</li>
+                <li>📄 Document: PDF, TXT</li>
+                <li>🌐 Online: URLs, YouTube</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
