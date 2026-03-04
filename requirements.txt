@@ -12,5 +12,5 @@ matplotlib
 textblob
 qrcode
 pillow
-googletrans==4.0.0-rc1
 sumy
+deep-translator
