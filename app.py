@@ -25,7 +25,7 @@ from wordcloud import WordCloud
 import qrcode
 from PIL import Image
 from deep_translator import GoogleTranslator
-import random
+import google.generativeai as genai
 
 # ===== NLTK DOWNLOAD =====
 try:
@@ -43,161 +43,200 @@ except:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
+# ===== CONFIGURE GEMINI AI =====
+try:
+    # Try to get from secrets first, then from session state
+    if 'GEMINI_API_KEY' in st.secrets:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    elif 'gemini_key' in st.session_state and st.session_state.gemini_key:
+        genai.configure(api_key=st.session_state.gemini_key)
+    else:
+        st.warning("⚠️ Gemini API key not configured. Chatbot will use basic responses.")
+except:
+    pass
+
 st.set_page_config(page_title="Audio to Text Summarizer Using NLP", page_icon="🎤", layout="wide")
 
-# ===== CUSTOM CSS WITH NEW BACKGROUND =====
+# ===== CUSTOM CSS WITH DARK BACKGROUND =====
 st.markdown("""
 <style>
-    /* Main background gradient */
+    /* Main background - DARK GRADIENT */
     .stApp {
-        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-        color: white;
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e) !important;
+    }
+    
+    /* All text white */
+    .stApp, .stMarkdown, p, h1, h2, h3, h4, h5, h6, label, .stTextInput label, .stSelectbox label {
+        color: white !important;
     }
     
     /* Main header */
     .main-header {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
-        padding: 2rem;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.1);
-    }
-    .main-header h1 {
-        font-size: 2.5rem;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important;
+        padding: 2rem !important;
+        border-radius: 15px !important;
+        color: white !important;
+        text-align: center !important;
+        margin-bottom: 2rem !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
     }
     
     /* Section cards */
     .section-card {
-        background: rgba(255,255,255,0.1);
-        backdrop-filter: blur(10px);
-        padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 5px solid #ff6b6b;
-        margin: 1rem 0;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        color: white;
+        background: rgba(255,255,255,0.1) !important;
+        backdrop-filter: blur(10px) !important;
+        padding: 1.5rem !important;
+        border-radius: 10px !important;
+        border-left: 5px solid #ff6b6b !important;
+        margin: 1rem 0 !important;
+        color: white !important;
     }
     
     /* Keyword tags */
     .keyword-tag {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
-        color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        display: inline-block;
-        margin: 0.2rem;
-        font-size: 0.9rem;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important;
+        color: white !important;
+        padding: 0.3rem 0.8rem !important;
+        border-radius: 20px !important;
+        display: inline-block !important;
+        margin: 0.2rem !important;
     }
     
     /* Metric boxes */
     .metric-box {
-        background: rgba(255,255,255,0.1);
-        backdrop-filter: blur(5px);
-        padding: 1rem;
-        border-radius: 8px;
-        text-align: center;
-        border: 1px solid rgba(255,255,255,0.2);
-        color: white;
+        background: rgba(255,255,255,0.1) !important;
+        backdrop-filter: blur(5px) !important;
+        padding: 1rem !important;
+        border-radius: 8px !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        color: white !important;
     }
     
     /* Buttons */
     .stButton > button {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
-        color: white;
-        border: none;
-        padding: 0.5rem 1.5rem;
-        border-radius: 25px;
-        font-weight: bold;
-        width: 100%;
-        border: 1px solid rgba(255,255,255,0.2);
-        transition: all 0.3s ease;
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important;
+        color: white !important;
+        border: none !important;
+        padding: 0.5rem 1.5rem !important;
+        border-radius: 25px !important;
+        font-weight: bold !important;
+        width: 100% !important;
+        transition: all 0.3s ease !important;
     }
     .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(255,107,107,0.4);
+        transform: translateY(-2px) !important;
+        box-shadow: 0 5px 15px rgba(255,107,107,0.4) !important;
     }
     
-    /* Slider container */
+    /* Text inputs */
+    .stTextInput > div > div > input {
+        background: rgba(255,255,255,0.1) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Text area */
+    .stTextArea textarea {
+        background: rgba(255,255,255,0.1) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Slider */
     .slider-container {
-        background: rgba(255,255,255,0.1);
-        backdrop-filter: blur(5px);
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-        border: 1px solid rgba(255,255,255,0.2);
+        background: rgba(255,255,255,0.1) !important;
+        padding: 1rem !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
     }
     
-    /* Tabs styling */
+    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 2rem;
-        background: rgba(255,255,255,0.1);
-        padding: 0.5rem;
-        border-radius: 10px;
+        background: rgba(255,255,255,0.1) !important;
+        padding: 0.5rem !important;
+        border-radius: 10px !important;
+        gap: 0.5rem !important;
     }
     .stTabs [data-baseweb="tab"] {
-        color: white;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
+        color: white !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1rem !important;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important;
+    }
+    
+    /* Chat messages */
+    .user-message {
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important;
+        color: white !important;
+        padding: 0.8rem 1.2rem !important;
+        border-radius: 20px 20px 5px 20px !important;
+        margin: 0.5rem 0 !important;
+        text-align: right !important;
+        max-width: 80% !important;
+        float: right !important;
+        clear: both !important;
+    }
+    .bot-message {
+        background: rgba(255,255,255,0.15) !important;
+        color: white !important;
+        padding: 0.8rem 1.2rem !important;
+        border-radius: 20px 20px 20px 5px !important;
+        margin: 0.5rem 0 !important;
+        text-align: left !important;
+        max-width: 80% !important;
+        float: left !important;
+        clear: both !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+    }
+    .chat-container {
+        background: rgba(0,0,0,0.2) !important;
+        border-radius: 15px !important;
+        padding: 1rem !important;
+        min-height: 400px !important;
+        max-height: 500px !important;
+        overflow-y: auto !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
     }
     
     /* Success messages */
     .success-msg {
-        background: rgba(40, 167, 69, 0.2);
-        color: #d4edda;
-        padding: 0.5rem;
-        border-radius: 5px;
-        text-align: center;
-        margin: 0.5rem 0;
-        border: 1px solid #28a745;
+        background: rgba(40, 167, 69, 0.2) !important;
+        color: #d4edda !important;
+        padding: 0.5rem !important;
+        border-radius: 5px !important;
+        border: 1px solid #28a745 !important;
     }
     
     /* Info messages */
     .info-msg {
-        background: rgba(23, 162, 184, 0.2);
-        color: #d1ecf1;
-        padding: 0.5rem;
-        border-radius: 5px;
-        border: 1px solid #17a2b8;
+        background: rgba(23, 162, 184, 0.2) !important;
+        color: #d1ecf1 !important;
+        padding: 0.5rem !important;
+        border-radius: 5px !important;
+        border: 1px solid #17a2b8 !important;
     }
     
-    /* Chatbot section */
-    .chat-container {
-        background: rgba(255,255,255,0.05);
-        border-radius: 10px;
-        padding: 1rem;
-        border: 1px solid rgba(255,255,255,0.1);
-        max-height: 400px;
-        overflow-y: auto;
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
     }
-    .user-message {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 15px 15px 0 15px;
-        margin: 0.5rem 0;
-        text-align: right;
-    }
-    .bot-message {
+    ::-webkit-scrollbar-track {
         background: rgba(255,255,255,0.1);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 15px 15px 15px 0;
-        margin: 0.5rem 0;
-        text-align: left;
-        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ff6b6b, #556270);
+        border-radius: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ===== HEADER WITH NEW TITLE =====
+# ===== HEADER =====
 st.markdown("""
 <div class='main-header'>
     <h1>🎤 Audio to Text Summarizer Using NLP</h1>
@@ -208,6 +247,8 @@ st.markdown("""
 # ===== SESSION STATE INITIALIZATION =====
 if 'assemblyai_key' not in st.session_state:
     st.session_state.assemblyai_key = ''
+if 'gemini_key' not in st.session_state:
+    st.session_state.gemini_key = ''
 if 'current_text' not in st.session_state:
     st.session_state.current_text = ''
 if 'current_summary' not in st.session_state:
@@ -235,17 +276,33 @@ if 'show_comparison' not in st.session_state:
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-# ===== SIDEBAR WITH NEW ICONS =====
+# ===== SIDEBAR =====
 with st.sidebar:
     st.markdown("### 🔐 API Configuration")
+    
     assembly_key = st.text_input(
         "🗝️ AssemblyAI Key",
         value=st.session_state.assemblyai_key,
         type="password"
     )
+    
+    gemini_key = st.text_input(
+        "🤖 Google Gemini Key (for AI Chat)",
+        value=st.session_state.gemini_key,
+        type="password"
+    )
+    
     if st.button("💾 Save Keys", use_container_width=True):
         st.session_state.assemblyai_key = assembly_key
-        st.success("✅ Keys saved!")
+        st.session_state.gemini_key = gemini_key
+        if gemini_key:
+            try:
+                genai.configure(api_key=gemini_key)
+                st.success("✅ Gemini configured!")
+            except:
+                st.error("❌ Invalid Gemini key")
+        else:
+            st.success("✅ Keys saved!")
     
     st.markdown("---")
     st.markdown("### 📌 Supported Formats")
@@ -260,7 +317,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # History viewer with new icon
+    # History viewer
     if st.session_state.history:
         with st.expander("📜 Recent History"):
             for i, item in enumerate(st.session_state.history[-5:]):
@@ -269,6 +326,48 @@ with st.sidebar:
                 if st.button(f"View #{i+1}", key=f"hist_{i}"):
                     st.session_state.current_summary = item['full_summary']
                 st.divider()
+
+# ===== GEMINI AI RESPONSE FUNCTION =====
+def get_gemini_response(user_input, context=""):
+    """Real AI response using Google Gemini"""
+    try:
+        # Check if Gemini is configured
+        if not st.session_state.gemini_key and 'GEMINI_API_KEY' not in st.secrets:
+            return "⚠️ Please configure your Google Gemini API key in the sidebar to use the AI chatbot."
+        
+        # Configure if needed
+        if st.session_state.gemini_key:
+            genai.configure(api_key=st.session_state.gemini_key)
+        
+        model = genai.GenerativeModel('gemini-pro')
+        
+        # Create prompt with context
+        prompt = f"""You are an AI assistant for a Text Summarizer app called "Audio to Text Summarizer Using NLP".
+The app can summarize audio, video, PDF, URLs, and text using NLP techniques.
+
+Current user context:
+- They have {'a summary generated' if context else 'not generated a summary yet'}
+- Summary content: {context[:500] if context else 'No summary yet'}
+
+The app features include:
+- Summarization using LexRank algorithm
+- Keyword extraction
+- Word cloud visualization
+- QR code generation for sharing
+- Translation to Indian languages (Telugu, Hindi, Tamil, etc.)
+- Text-to-speech audio download
+- History and favorites
+
+User question: {user_input}
+
+Provide a helpful, friendly, and concise answer. If the question is about the app's features, explain them.
+If it's about the content, answer based on the context. Be conversational and use emojis occasionally.
+"""
+        
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ Error: {str(e)}. Please check your Gemini API key."
 
 # ===== PDF EXTRACTION =====
 def extract_pdf_text(pdf_path):
@@ -450,64 +549,6 @@ def translate_summary(text, dest='te'):
     except:
         return None
 
-# ===== AI CHATBOT =====
-def get_chatbot_response(user_input, context=""):
-    """AI Chatbot that responds based on user input and context"""
-    user_input = user_input.lower()
-    
-    # Greetings
-    if any(word in user_input for word in ['hello', 'hi', 'hey', 'namaste']):
-        responses = [
-            "👋 Hello! How can I help you today?",
-            "🙏 Namaste! How can I assist you?",
-            "👋 Hi there! Feel free to ask me anything about your summaries."
-        ]
-        return random.choice(responses)
-    
-    # About summary
-    elif any(word in user_input for word in ['summary', 'summarize', 'summarization']):
-        if context:
-            return f"📝 Your current summary is: {context[:200]}... You can adjust the length using the slider above."
-        else:
-            return "📝 I can help you understand your summary better. You can ask me specific questions about the content."
-    
-    # Keywords
-    elif any(word in user_input for word in ['keyword', 'keywords', 'topics', 'main']):
-        return "🔑 Keywords are the most frequent important words in your text. They appear as colored tags below the summary."
-    
-    # Word Cloud
-    elif any(word in user_input for word in ['word cloud', 'cloud', 'visual']):
-        return "☁️ Word Cloud is a visual representation of keywords. Bigger words appear more frequently in your text."
-    
-    # QR Code
-    elif any(word in user_input for word in ['qr', 'qrcode', 'scan']):
-        return "📱 QR Code lets you share your summary on mobile. Just scan it with your phone camera!"
-    
-    # Translation
-    elif any(word in user_input for word in ['translate', 'telugu', 'hindi', 'language']):
-        return "🌐 You can translate your summary to Telugu, Hindi, Tamil, Kannada, or Malayalam using the Translate feature."
-    
-    # Audio
-    elif any(word in user_input for word in ['audio', 'listen', 'speak', 'voice']):
-        return "🔊 You can listen to your summary by clicking the Audio download button. It converts text to speech."
-    
-    # Download
-    elif any(word in user_input for word in ['download', 'save', 'export']):
-        return "📥 You can download the full text, summary, or audio using the download buttons below."
-    
-    # Help
-    elif any(word in user_input for word in ['help', 'how to', 'guide', 'tutorial']):
-        return "ℹ️ Check the Help tab for detailed instructions on how to use all features of this app."
-    
-    # Default responses
-    else:
-        responses = [
-            "🤔 I'm not sure I understand. You can ask me about summary, keywords, word cloud, QR code, translation, or download features.",
-            "💡 Try asking about 'summary', 'keywords', 'word cloud', or 'how to use'.",
-            "🤖 I can help with understanding your summary and app features. What would you like to know?"
-        ]
-        return random.choice(responses)
-
 # ===== GENERATE SUMMARY =====
 def generate_summary(text, num_points):
     sentences = nltk.sent_tokenize(text)
@@ -606,7 +647,7 @@ def display_results(text, source_name):
     st.markdown("## 📝 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    # Statistics with different icons
+    # Statistics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("📊 Characters", f"{original_chars:,}")
@@ -617,15 +658,14 @@ def display_results(text, source_name):
     with col4:
         st.metric("📉 Reduced", f"{reduction}%")
     
-    # Reading Time with different icon
+    # Reading Time
     minutes = original_words // 200
     seconds = int((original_words % 200) / 200 * 60)
     st.metric("⏳ Reading Time", f"{minutes} min {seconds} sec")
     
-    # ===== ADVANCED FEATURES WITH DIFFERENT ICONS =====
+    # ===== ADVANCED FEATURES =====
     st.markdown("### 🚀 Advanced Features")
     
-    # Create 5 columns with different icons
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
@@ -729,23 +769,31 @@ def display_results(text, source_name):
 
 # ===== AI CHATBOT SECTION =====
 def display_chatbot():
-    st.markdown("### 🤖 AI Assistant")
+    st.markdown("### 🤖 AI Assistant (Powered by Google Gemini)")
+    
+    # Gemini key status
+    if not st.session_state.gemini_key and 'GEMINI_API_KEY' not in st.secrets:
+        st.warning("⚠️ Please add your Google Gemini API key in the sidebar to use the AI chatbot.")
     
     # Chat container
     chat_container = st.container()
     
     with chat_container:
+        st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+        
         # Display chat history
         for message in st.session_state.chat_history:
             if message['role'] == 'user':
                 st.markdown(f"<div class='user-message'>👤 {message['content']}</div>", unsafe_allow_html=True)
             else:
                 st.markdown(f"<div class='bot-message'>🤖 {message['content']}</div>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
     
     # Chat input
-    col1, col2 = st.columns([4, 1])
+    col1, col2 = st.columns([5, 1])
     with col1:
-        user_input = st.text_input("", placeholder="Ask me anything...", key="chat_input")
+        user_input = st.text_input("", placeholder="Ask me anything about your summary or the app...", key="chat_input")
     with col2:
         send_button = st.button("📤 Send", key="send_btn")
     
@@ -753,14 +801,20 @@ def display_chatbot():
         # Add user message
         st.session_state.chat_history.append({'role': 'user', 'content': user_input})
         
-        # Get bot response with context
+        # Get AI response
         context = st.session_state.get('current_summary', '')
-        bot_response = get_chatbot_response(user_input, context)
+        with st.spinner("🤔 Thinking..."):
+            bot_response = get_gemini_response(user_input, context)
         
         # Add bot response
         st.session_state.chat_history.append({'role': 'bot', 'content': bot_response})
         
         # Clear input and rerun
+        st.rerun()
+    
+    # Clear chat button
+    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="clear_chat"):
+        st.session_state.chat_history = []
         st.rerun()
 
 # ===== MAIN UI =====
@@ -850,26 +904,12 @@ def main():
         <div class='section-card'>
             <h3>📌 How to Use</h3>
             <ol>
-                <li><strong>Get API Key:</strong> Sign up at <a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> (Free)</li>
+                <li><strong>Get API Keys:</strong>
+                    <ul>
+                        <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
+                        <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
+                    </ul>
+                </li>
                 <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
                 <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
-                <li><strong>Try Features:</strong> Word Cloud, QR Code, Translation, Compare</li>
-                <li><strong>Ask AI:</strong> Use the AI Chat tab to ask questions</li>
-                <li><strong>Download:</strong> Get text, summary, or audio</li>
-            </ol>
-            
-            <h3>✨ Features</h3>
-            <ul>
-                <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
-                <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
-                <li>☁️ <strong>Word Cloud</strong> - Visual keywords</li>
-                <li>📱 <strong>QR Code</strong> - Share on mobile</li>
-                <li>🌐 <strong>Translation</strong> - Telugu, Hindi, Tamil</li>
-                <li>🤖 <strong>AI Chatbot</strong> - Ask questions about your summary</li>
-                <li>📥 <strong>Download</strong> - Text, summary, audio</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+                <li><strong>
