@@ -900,7 +900,6 @@ def main():
         display_chatbot()
     
     with tab5:
-       with tab5:
     st.markdown("""
     <div class='section-card'>
         <h3>📌 How to Use</h3>
@@ -938,3 +937,4 @@ def main():
         </ul>
     </div>
     """, unsafe_allow_html=True)
+        
