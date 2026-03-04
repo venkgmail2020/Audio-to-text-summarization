@@ -13,3 +13,4 @@ qrcode
 pillow
 deep-translator
 sumy
+google-generativeai 
