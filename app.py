@@ -10,7 +10,7 @@ from collections import Counter
 from gtts import gTTS
 import io
 import base64
-from sumy.parsers.plaintext import PlaintextParser  # ✅ Correct (lowercase t)
+from sumy.parsers.plaintext import PlaintextParser  # ✅ Fixed: lowercase 't'
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import ssl
