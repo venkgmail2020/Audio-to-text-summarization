@@ -10,7 +10,7 @@ from collections import Counter
 from gtts import gTTS
 import io
 import base64
-from sumy.parsers.plaintext import PlaintextParser  # ✅ Fixed: lowercase 't'
+from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import ssl
@@ -25,7 +25,7 @@ from wordcloud import WordCloud
 from textblob import TextBlob
 import qrcode
 from PIL import Image
-from googletrans import Translator
+from deep_translator import GoogleTranslator  # ← Fixed: googletrans replaced
 
 # ===== NLTK DOWNLOAD =====
 try:
