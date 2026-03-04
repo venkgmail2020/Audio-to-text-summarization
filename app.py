@@ -22,10 +22,9 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from datetime import datetime
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-from textblob import TextBlob
 import qrcode
 from PIL import Image
-from deep_translator import GoogleTranslator  # ← Fixed: googletrans replaced
+from deep_translator import GoogleTranslator
 
 # ===== NLTK DOWNLOAD =====
 try:
@@ -45,7 +44,7 @@ except:
 
 st.set_page_config(page_title="Advanced Text Summarizer", page_icon="🚀", layout="wide")
 
-# ===== CUSTOM CSS WITH DARK MODE SUPPORT =====
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
@@ -55,7 +54,6 @@ st.markdown("""
         color: white;
         text-align: center;
         margin-bottom: 2rem;
-        transition: all 0.3s ease;
     }
     .section-card {
         background: white;
@@ -64,7 +62,6 @@ st.markdown("""
         border-left: 5px solid #667eea;
         margin: 1rem 0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        transition: all 0.3s ease;
     }
     .keyword-tag {
         background: #667eea;
@@ -74,7 +71,6 @@ st.markdown("""
         display: inline-block;
         margin: 0.2rem;
         font-size: 0.9rem;
-        transition: all 0.3s ease;
     }
     .metric-box {
         background: white;
@@ -82,7 +78,6 @@ st.markdown("""
         border-radius: 8px;
         text-align: center;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        transition: all 0.3s ease;
     }
     .stButton > button {
         background: linear-gradient(135deg, #667eea, #764ba2);
@@ -92,45 +87,25 @@ st.markdown("""
         border-radius: 25px;
         font-weight: bold;
         width: 100%;
-        transition: all 0.3s ease;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
     .slider-container {
         background: #f0f2f6;
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
-        transition: all 0.3s ease;
     }
-    /* Dark mode styles */
-    .dark-mode {
-        background-color: #1e1e1e !important;
-        color: white !important;
-    }
-    .dark-mode .section-card {
-        background-color: #2d2d2d !important;
-        color: white !important;
-        border-left: 5px solid #9f7aea !important;
-    }
-    .dark-mode .metric-box {
-        background-color: #2d2d2d !important;
-        color: white !important;
-    }
-    .dark-mode .slider-container {
-        background-color: #2d2d2d !important;
-    }
-    .dark-mode .keyword-tag {
-        background: #9f7aea !important;
+    .success-msg {
+        background: #d4edda;
+        color: #155724;
+        padding: 0.5rem;
+        border-radius: 5px;
+        text-align: center;
+        margin: 0.5rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ===== DARK MODE TOGGLE =====
-if 'dark_mode' not in st.session_state:
-    st.session_state.dark_mode = False
+st.markdown("<div class='main-header'><h1>🚀 Advanced Text Summarizer Using NLP</h1><p>Video | Audio | PDF | Text | URL | YouTube | AI Features</p></div>", unsafe_allow_html=True)
 
 # ===== SESSION STATE INITIALIZATION =====
 if 'assemblyai_key' not in st.session_state:
@@ -145,9 +120,12 @@ if 'history' not in st.session_state:
     st.session_state.history = []
 if 'favorites' not in st.session_state:
     st.session_state.favorites = []
-
-# ===== HEADER =====
-st.markdown("<div class='main-header'><h1>🚀 Advanced Text Summarizer Using NLP</h1><p>Video | Audio | PDF | Text | URL | YouTube | AI Features</p></div>", unsafe_allow_html=True)
+if 'translated_text' not in st.session_state:
+    st.session_state.translated_text = None
+if 'qr_code' not in st.session_state:
+    st.session_state.qr_code = None
+if 'wordcloud_fig' not in st.session_state:
+    st.session_state.wordcloud_fig = None
 
 # ===== SIDEBAR =====
 with st.sidebar:
@@ -160,14 +138,6 @@ with st.sidebar:
     if st.button("💾 Save Keys", use_container_width=True):
         st.session_state.assemblyai_key = assembly_key
         st.success("✅ Keys saved!")
-    
-    st.markdown("---")
-    
-    # Dark mode toggle
-    dark_mode = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode)
-    if dark_mode != st.session_state.dark_mode:
-        st.session_state.dark_mode = dark_mode
-        st.rerun()
     
     st.markdown("---")
     st.markdown("### 📌 Supported")
@@ -186,16 +156,8 @@ with st.sidebar:
                 st.write(f"**{item['time']}**")
                 st.write(f"📄 {item['source']} - {item['words']} words")
                 if st.button(f"View #{i+1}", key=f"hist_{i}"):
-                    st.session_state.current_summary = item['summary']
+                    st.session_state.current_summary = item['full_summary']
                 st.divider()
-    
-    # Favorites
-    if st.session_state.favorites:
-        with st.expander("⭐ Favorites"):
-            for i, fav in enumerate(st.session_state.favorites[-5:]):
-                st.write(f"**{fav['title']}**")
-                if st.button(f"Load #{i+1}", key=f"fav_{i}"):
-                    st.session_state.current_summary = fav['summary']
 
 # ===== PDF EXTRACTION =====
 def extract_pdf_text(pdf_path):
@@ -245,8 +207,9 @@ def extract_youtube_content(url):
             video_id = url.split('youtu.be/')[-1].split('?')[0]
         
         if not video_id:
-            return None, None
+            return None, None, None
         
+        # Try transcript first
         try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             for lang in ['te', 'en', 'hi']:
@@ -259,23 +222,24 @@ def extract_youtube_content(url):
                         info = ydl.extract_info(url, download=False)
                         title = info.get('title', 'YouTube Video')
                     
-                    return full_text, f"YouTube: {title}"
+                    return full_text, f"YouTube: {title}", "transcript"
                 except:
                     continue
         except:
             pass
         
+        # Fallback to description
         with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
             info = ydl.extract_info(url, download=False)
             title = info.get('title', 'YouTube Video')
             description = info.get('description', '')
             
             if description:
-                return description, f"YouTube: {title}"
+                return description, f"YouTube: {title}", "description"
         
-        return None, None
+        return None, None, None
     except:
-        return None, None
+        return None, None, None
 
 # ===== ASSEMBLYAI TRANSCRIPTION =====
 def transcribe_with_assemblyai(audio_path):
@@ -338,7 +302,7 @@ def text_to_speech(text):
     except:
         return None
 
-# ===== WORD CLOUD GENERATION =====
+# ===== WORD CLOUD GENERATION (No Refresh) =====
 def create_wordcloud(text):
     try:
         wordcloud = WordCloud(width=800, height=400, 
@@ -351,47 +315,7 @@ def create_wordcloud(text):
     except:
         return None
 
-# ===== READING TIME CALCULATION =====
-def reading_time(text):
-    words = len(text.split())
-    minutes = words // 200
-    seconds = int((words % 200) / 200 * 60)
-    return f"{minutes} min {seconds} sec"
-
-# ===== TEXT DIFFICULTY ANALYSIS =====
-def text_difficulty(text):
-    sentences = len(nltk.sent_tokenize(text))
-    words = len(text.split())
-    if sentences == 0:
-        return "⚪ Unknown", 0
-    avg_words = words / sentences
-    
-    if avg_words < 12:
-        return "🟢 Easy", avg_words
-    elif avg_words < 20:
-        return "🟡 Medium", avg_words
-    else:
-        return "🔴 Hard", avg_words
-
-# ===== SENTIMENT ANALYSIS =====
-def analyze_sentiment(text):
-    try:
-        blob = TextBlob(text)
-        polarity = blob.sentiment.polarity
-        subjectivity = blob.sentiment.subjectivity
-        
-        if polarity > 0.1:
-            sentiment = "😊 Positive"
-        elif polarity < -0.1:
-            sentiment = "😞 Negative"
-        else:
-            sentiment = "😐 Neutral"
-        
-        return sentiment, polarity, subjectivity
-    except:
-        return "❓ Unknown", 0, 0
-
-# ===== QR CODE GENERATION =====
+# ===== QR CODE GENERATION (No Refresh) =====
 def generate_qr(text):
     try:
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -406,12 +330,12 @@ def generate_qr(text):
     except:
         return None
 
-# ===== TRANSLATION =====
+# ===== TRANSLATION (No Refresh) =====
 def translate_summary(text, dest='te'):
     try:
-        translator = Translator()
-        result = translator.translate(text[:1000], dest=dest)
-        return result.text
+        translator = GoogleTranslator(source='auto', target=dest)
+        result = translator.translate(text[:1000])
+        return result
     except:
         return None
 
@@ -445,7 +369,7 @@ def generate_summary(text, num_points):
     
     return summary
 
-# ===== DISPLAY RESULTS WITH ALL NEW FEATURES =====
+# ===== DISPLAY RESULTS =====
 def display_results(text, source_name):
     if not text or len(text.strip()) == 0:
         st.error("No text to display")
@@ -458,20 +382,6 @@ def display_results(text, source_name):
     total_sentences = len(nltk.sent_tokenize(text))
     original_words = len(text.split())
     original_chars = len(text)
-    
-    # Apply dark mode if enabled
-    if st.session_state.dark_mode:
-        st.markdown("""
-        <style>
-            .stApp { background-color: #1e1e1e; }
-            .main-header { background: linear-gradient(135deg, #9f7aea, #667eea); }
-            .section-card { background-color: #2d2d2d; color: white; border-left: 5px solid #9f7aea; }
-            .metric-box { background-color: #2d2d2d; color: white; }
-            .slider-container { background-color: #2d2d2d; }
-            .keyword-tag { background: #9f7aea; }
-            p, h1, h2, h3, h4, .stMarkdown { color: white; }
-        </style>
-        """, unsafe_allow_html=True)
     
     # Slider
     st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
@@ -497,9 +407,10 @@ def display_results(text, source_name):
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Generate summary
-    if total_sentences < 3:
+    if total_sentences <= num_points:
         summary = text
         summary_words = original_words
+        st.info(f"ℹ️ Text has only {total_sentences} sentences. Showing full text.")
     else:
         summary = generate_summary(text, num_points)
         summary_words = len(summary.split())
@@ -508,9 +419,8 @@ def display_results(text, source_name):
     st.session_state.current_summary = summary
     
     # Calculate reduction
-    if original_words > 0:
+    if original_words > 0 and summary_words < original_words:
         reduction = int((1 - summary_words/original_words) * 100)
-        reduction = max(0, min(100, reduction))
     else:
         reduction = 0
     
@@ -527,7 +437,7 @@ def display_results(text, source_name):
     st.markdown("## 📋 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    # Statistics Row 1
+    # Statistics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Characters", f"{original_chars:,}")
@@ -538,86 +448,88 @@ def display_results(text, source_name):
     with col4:
         st.metric("Reduced", f"{reduction}%")
     
-    # Statistics Row 2 - NEW FEATURES
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("⏱️ Reading Time", reading_time(text))
-    with col2:
-        difficulty, avg = text_difficulty(text)
-        st.metric("📚 Difficulty", difficulty, f"{avg:.1f} words/sent")
-    with col3:
-        sentiment, polarity, _ = analyze_sentiment(text)
-        st.metric("📊 Sentiment", sentiment, f"{polarity:.2f}")
-    with col4:
-        st.metric("📝 Summary Words", f"{summary_words:,}")
+    # Reading Time
+    minutes = original_words // 200
+    seconds = int((original_words % 200) / 200 * 60)
+    st.metric("⏱️ Reading Time", f"{minutes} min {seconds} sec")
     
     # Advanced Features Section
     st.markdown("### 🚀 Advanced Features")
     
-    tab_a, tab_b, tab_c, tab_d, tab_e = st.tabs(["☁️ Word Cloud", "🔗 QR Code", "🌐 Translate", "⭐ Favorites", "📊 Compare"])
+    col1, col2, col3, col4, col5 = st.columns(5)
     
-    with tab_a:
-        if st.button("Generate Word Cloud"):
+    with col1:
+        if st.button("☁️ Word Cloud", key="wc_btn"):
             with st.spinner("Creating word cloud..."):
                 fig = create_wordcloud(text)
                 if fig:
-                    st.pyplot(fig)
-                else:
-                    st.error("Failed to generate word cloud")
+                    st.session_state.wordcloud_fig = fig
     
-    with tab_b:
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("📱 Generate QR for Summary"):
+    with col2:
+        if st.button("🔗 QR Code", key="qr_btn"):
+            with st.spinner("Generating QR code..."):
                 qr_img = generate_qr(summary)
                 if qr_img:
-                    st.image(qr_img, caption="Scan to share summary", width=200)
-        with col2:
-            if st.button("📱 Generate QR for Full Text"):
-                qr_img = generate_qr(text[:200])
-                if qr_img:
-                    st.image(qr_img, caption="Scan to share full text", width=200)
+                    st.session_state.qr_code = qr_img
     
-    with tab_c:
-        lang = st.selectbox("Select language", ["Telugu", "Hindi", "Tamil", "Kannada", "Malayalam"])
-        if st.button("Translate Summary"):
-            lang_code = {'Telugu': 'te', 'Hindi': 'hi', 'Tamil': 'ta', 
-                        'Kannada': 'kn', 'Malayalam': 'ml'}[lang]
-            with st.spinner(f"Translating to {lang}..."):
-                translated = translate_summary(summary, lang_code)
+    with col3:
+        if st.button("🌐 Translate", key="trans_btn"):
+            with st.spinner("Translating..."):
+                translated = translate_summary(summary, 'te')
                 if translated:
-                    st.success(f"**Translation ({lang}):**")
-                    st.info(translated)
-                else:
-                    st.error("Translation failed")
+                    st.session_state.translated_text = translated
     
-    with tab_d:
-        col1, col2 = st.columns(2)
-        with col1:
-            title = st.text_input("Favorite title", value=f"Summary {datetime.now().strftime('%H:%M')}")
-        with col2:
-            if st.button("⭐ Add to Favorites"):
-                st.session_state.favorites.append({
-                    'title': title,
-                    'summary': summary,
-                    'time': datetime.now().strftime("%Y-%m-%d %H:%M")
-                })
-                st.success("Added to favorites!")
+    with col4:
+        title = st.text_input("Title", value="My Summary", key="fav_title", label_visibility="collapsed")
+        if st.button("⭐ Add Favorite", key="fav_btn"):
+            st.session_state.favorites.append({
+                'title': title,
+                'summary': summary,
+                'time': datetime.now().strftime("%Y-%m-%d %H:%M")
+            })
+            st.success("✅ Added to favorites!")
     
-    with tab_e:
+    with col5:
+        if st.button("📊 Compare", key="comp_btn"):
+            st.session_state.show_comparison = True
+    
+    # Display generated content
+    if st.session_state.get('wordcloud_fig'):
+        st.pyplot(st.session_state.wordcloud_fig)
+        if st.button("Clear Word Cloud", key="clear_wc"):
+            st.session_state.wordcloud_fig = None
+            st.rerun()
+    
+    if st.session_state.get('qr_code'):
+        st.image(st.session_state.qr_code, caption="Scan to share summary", width=200)
+        if st.button("Clear QR", key="clear_qr"):
+            st.session_state.qr_code = None
+            st.rerun()
+    
+    if st.session_state.get('translated_text'):
+        st.success(f"**Telugu Translation:**")
+        st.info(st.session_state.translated_text)
+        if st.button("Clear Translation", key="clear_trans"):
+            st.session_state.translated_text = None
+            st.rerun()
+    
+    if st.session_state.get('show_comparison'):
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**🔹 Short (3 sentences)**")
             short_summary = generate_summary(text, 3)
             st.info(short_summary[:200] + "..." if len(short_summary) > 200 else short_summary)
         with col2:
-            st.markdown("**🔸 Medium (7 sentences)**")
-            medium_summary = generate_summary(text, 7)
-            st.info(medium_summary[:200] + "..." if len(medium_summary) > 200 else medium_summary)
+            st.markdown("**🔸 Long (7 sentences)**")
+            long_summary = generate_summary(text, 7)
+            st.info(long_summary[:200] + "..." if len(long_summary) > 200 else long_summary)
+        if st.button("Close Comparison", key="close_comp"):
+            st.session_state.show_comparison = False
+            st.rerun()
     
     # Downloads
     st.markdown("### 📥 Downloads")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.download_button("📄 Full Text", text, f"{source_name}_full.txt")
@@ -630,10 +542,6 @@ def display_results(text, source_name):
         if audio:
             st.audio(audio, format='audio/mp3')
             st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3", "audio/mp3")
-    
-    with col4:
-        if st.button("🔗 Share"):
-            st.success("✅ Link copied to clipboard!")
     
     # Keywords
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
@@ -699,9 +607,11 @@ def main():
         if url and st.button("🌐 Fetch", key="fetch_url"):
             if 'youtube.com' in url or 'youtu.be' in url:
                 with st.spinner("Fetching YouTube..."):
-                    text, title = extract_youtube_content(url)
+                    text, title, content_type = extract_youtube_content(url)
                     if text:
                         st.success(f"✅ {title}")
+                        if content_type == "description":
+                            st.info("ℹ️ Showing video description (no captions available)")
                         display_results(text, "youtube")
                     else:
                         st.warning("No content found")
@@ -732,26 +642,22 @@ def main():
                 <li>Get AssemblyAI Key from assemblyai.com</li>
                 <li>Upload file or paste URL</li>
                 <li>Adjust slider for summary length</li>
-                <li>Try advanced features: Word Cloud, QR Code, Translation</li>
+                <li>Try advanced features - they won't refresh the page!</li>
                 <li>Download text/summary/audio</li>
             </ol>
             
-            <h3>🚀 New Features Added</h3>
+            <h3>✨ Features</h3>
             <ul>
-                <li>✅ <strong>Dark Mode Toggle</strong> - Switch between light/dark themes</li>
-                <li>✅ <strong>Word Cloud</strong> - Visual representation of keywords</li>
-                <li>✅ <strong>Reading Time</strong> - Estimate time to read</li>
-                <li>✅ <strong>Difficulty Level</strong> - Easy/Medium/Hard classification</li>
-                <li>✅ <strong>Sentiment Analysis</strong> - Positive/Neutral/Negative detection</li>
-                <li>✅ <strong>QR Code Generator</strong> - Share summaries via QR</li>
-                <li>✅ <strong>Translation</strong> - Convert to Telugu, Hindi, Tamil, etc.</li>
-                <li>✅ <strong>History</strong> - Recent summaries saved</li>
-                <li>✅ <strong>Favorites</strong> - Save important summaries</li>
-                <li>✅ <strong>Summary Comparison</strong> - Compare different lengths</li>
+                <li>✅ <strong>No Refresh</strong> - Buttons won't reload page</li>
+                <li>✅ <strong>Word Cloud</strong> - Visual keywords</li>
+                <li>✅ <strong>QR Code</strong> - Share on mobile</li>
+                <li>✅ <strong>Translation</strong> - Telugu support</li>
+                <li>✅ <strong>Favorites</strong> - Save summaries</li>
+                <li>✅ <strong>Comparison</strong> - 3 vs 7 sentences</li>
+                <li>✅ <strong>History</strong> - Recent summaries</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
-# ===== CALL MAIN FUNCTION =====
 if __name__ == "__main__":
     main()
