@@ -900,16 +900,41 @@ def main():
         display_chatbot()
     
     with tab5:
-        st.markdown("""
-        <div class='section-card'>
-            <h3>📌 How to Use</h3>
-            <ol>
-                <li><strong>Get API Keys:</strong>
-                    <ul>
-                        <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
-                        <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
-                    </ul>
-                </li>
-                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
-                <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
-                <li><strong>
+       with tab5:
+    st.markdown("""
+    <div class='section-card'>
+        <h3>📌 How to Use</h3>
+        <ol>
+            <li><strong>Get API Keys:</strong>
+                <ul>
+                    <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
+                    <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
+                </ul>
+            </li>
+            <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
+            <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
+            <li><strong>Try Features:</strong> Word Cloud, QR Code, Translation, Compare</li>
+            <li><strong>Ask AI:</strong> Use the AI Chat tab for questions</li>
+            <li><strong>Download:</strong> Get text, summary, or audio</li>
+        </ol>
+        
+        <h3>✨ Features</h3>
+        <ul>
+            <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
+            <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
+            <li>☁️ <strong>Word Cloud</strong> - Visual keywords</li>
+            <li>📱 <strong>QR Code</strong> - Share on mobile</li>
+            <li>🌐 <strong>Translation</strong> - Telugu, Hindi, Tamil</li>
+            <li>🤖 <strong>AI Chatbot</strong> - Ask questions (requires Gemini key)</li>
+            <li>📥 <strong>Download</strong> - Text, summary, audio</li>
+        </ul>
+        
+        <h3>🎯 Supported Formats</h3>
+        <ul>
+            <li>🎥 Video: MP4, AVI, MOV</li>
+            <li>🎵 Audio: MP3, WAV, M4A</li>
+            <li>📄 Document: PDF, TXT</li>
+            <li>🌐 Online: URLs, YouTube</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
