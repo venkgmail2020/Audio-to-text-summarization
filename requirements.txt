@@ -7,10 +7,4 @@ validators
 beautifulsoup4
 yt-dlp
 youtube-transcript-api
-wordcloud
-matplotlib
-qrcode
-pillow
-deep-translator
-sumy
-google-generativeai 
+google-generativeai
