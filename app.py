@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import validators
 import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 from datetime import datetime
 
 # ===== NLTK DOWNLOAD =====
@@ -83,6 +83,20 @@ st.markdown("""
         border-radius: 8px;
         border-left: 4px solid #ff6b6b;
         margin: 1rem 0;
+    }
+    .success-box {
+        background: #d4edda;
+        color: #155724;
+        padding: 1rem;
+        border-radius: 5px;
+        border-left: 4px solid #28a745;
+    }
+    .warning-box {
+        background: #fff3cd;
+        color: #856404;
+        padding: 1rem;
+        border-radius: 5px;
+        border-left: 4px solid #ffc107;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -155,79 +169,228 @@ def extract_from_url(url):
     except Exception as e:
         return None, f"Error: {str(e)}"
 
-# ===== YOUTUBE EXTRACTION =====
+# ===== IMPROVED YOUTUBE EXTRACTION =====
 def extract_youtube_content(url):
+    """Better YouTube extraction with multiple fallbacks"""
     try:
+        # Extract video ID
         video_id = None
         if 'youtube.com/watch?v=' in url:
             video_id = url.split('watch?v=')[-1].split('&')[0]
         elif 'youtu.be/' in url:
             video_id = url.split('youtu.be/')[-1].split('?')[0]
+        
         if not video_id:
             return None, None, "Invalid YouTube URL"
         
-        # Try transcript first
+        # Try multiple approaches
+        
+        # Approach 1: Try to get video info using yt-dlp first
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': False,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title', 'YouTube Video')
+                description = info.get('description', '')
+                uploader = info.get('uploader', 'Unknown')
+                
+                # If we have description, use it
+                if description and len(description) > 100:
+                    return description, f"{title} - {uploader}", "Description"
+                
+                # If description is short but we have metadata
+                if description:
+                    return description, f"{title} - {uploader}", "Description (Limited)"
+        except Exception as e:
+            st.warning(f"yt-dlp info error: {e}")
+        
+        # Approach 2: Try transcripts
         try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            for lang in ['te', 'en', 'hi']:
+            
+            # Try different languages
+            for lang in ['te', 'en', 'hi', 'ta', 'kn', 'ml', 'bn', 'gu']:
                 try:
                     transcript = transcript_list.find_transcript([lang])
                     transcript_data = transcript.fetch()
                     full_text = ' '.join([item['text'] for item in transcript_data])
-                    with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-                        info = ydl.extract_info(url, download=False)
-                        title = info.get('title', 'YouTube Video')
-                    return full_text, title, "Captions"
+                    
+                    # Try to get title
+                    try:
+                        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                            info = ydl.extract_info(url, download=False)
+                            title = info.get('title', 'YouTube Video')
+                    except:
+                        title = "YouTube Video"
+                    
+                    return full_text, f"{title} (Captions)", "Captions"
                 except:
                     continue
         except:
             pass
         
-        # Fallback to description
-        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title', 'YouTube Video')
-            description = info.get('description', '')
-            if description:
-                return description, title, "Description"
-        return None, None, "No captions or description"
+        # Approach 3: Try with different User-Agent and browser-like headers
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            }
+            response = requests.get(f"https://www.youtube.com/watch?v={video_id}", headers=headers, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Try to get title
+                title_tag = soup.find('title')
+                title = title_tag.text.replace(' - YouTube', '') if title_tag else "YouTube Video"
+                
+                # Try to get description from meta tags
+                desc_tag = soup.find('meta', {'name': 'description'})
+                if desc_tag:
+                    description = desc_tag.get('content', '')
+                    if description and len(description) > 100:
+                        return description, title, "Meta Description"
+                
+                # Try to get description from other meta tags
+                og_desc = soup.find('meta', {'property': 'og:description'})
+                if og_desc:
+                    description = og_desc.get('content', '')
+                    if description and len(description) > 100:
+                        return description, title, "Open Graph Description"
+        except:
+            pass
+        
+        # Approach 4: If nothing works, provide info about video
+        try:
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title', 'YouTube Video')
+                duration = info.get('duration', 0)
+                uploader = info.get('uploader', 'Unknown')
+                view_count = info.get('view_count', 0)
+                
+                # Create a summary from available metadata
+                minutes = duration // 60
+                seconds = duration % 60
+                
+                metadata_text = f"""
+Title: {title}
+Uploader: {uploader}
+Duration: {minutes} minutes {seconds} seconds
+Views: {view_count:,}
+
+This video has no captions available. To get the content:
+1. Download the video and upload it directly
+2. Or check if captions are available in other languages
+"""
+                return metadata_text, f"{title} - Metadata Only", "Metadata"
+        except Exception as e:
+            return None, None, f"Could not extract: {str(e)}"
+        
     except Exception as e:
-        return None, None, f"Error: {str(e)}"
+        return None, None, f"YouTube extraction error: {str(e)}"
 
 # ===== ASSEMBLYAI TRANSCRIPTION =====
 def transcribe_with_assemblyai(audio_path):
+    """Transcribe audio with better error handling"""
     try:
-        headers = {'authorization': st.session_state.assemblyai_key}
-        with open(audio_path, 'rb') as f:
-            response = requests.post('https://api.assemblyai.com/v2/upload', headers=headers, data=f)
-        upload_url = response.json()['upload_url']
+        api_key = st.session_state.get('assemblyai_key', '').strip()
         
-        transcript_request = {
-            'audio_url': upload_url,
-            'language_detection': True,
-            'speech_models': ['universal-2']
-        }
-        response = requests.post('https://api.assemblyai.com/v2/transcript', json=transcript_request, headers=headers)
-        transcript_id = response.json()['id']
+        if not api_key:
+            st.error("❌ AssemblyAI Key is required")
+            return None
         
+        headers = {'authorization': api_key}
+        
+        # Step 1: Upload file
+        with st.spinner("📤 Uploading to AssemblyAI..."):
+            with open(audio_path, 'rb') as f:
+                upload_response = requests.post(
+                    'https://api.assemblyai.com/v2/upload',
+                    headers=headers,
+                    data=f
+                )
+            
+            # Check upload response
+            if upload_response.status_code != 200:
+                st.error(f"Upload failed: {upload_response.status_code}")
+                return None
+            
+            try:
+                upload_data = upload_response.json()
+                upload_url = upload_data.get('upload_url')
+                if not upload_url:
+                    st.error("No upload_url in response")
+                    return None
+            except:
+                st.error("Invalid JSON response from upload")
+                return None
+        
+        # Step 2: Request transcription
+        with st.spinner("⏳ Requesting transcription..."):
+            transcript_request = {
+                'audio_url': upload_url,
+                'language_detection': True,
+                'speech_models': ['universal-2']
+            }
+            
+            transcribe_response = requests.post(
+                'https://api.assemblyai.com/v2/transcript',
+                json=transcript_request,
+                headers=headers
+            )
+            
+            if transcribe_response.status_code != 200:
+                st.error(f"Transcription request failed: {transcribe_response.status_code}")
+                return None
+            
+            try:
+                transcribe_data = transcribe_response.json()
+                transcript_id = transcribe_data.get('id')
+                if not transcript_id:
+                    st.error("No transcript ID in response")
+                    return None
+            except:
+                st.error("Invalid JSON response from transcription")
+                return None
+        
+        # Step 3: Poll for results
         progress = st.progress(0)
         status = st.empty()
         
-        for i in range(60):
+        for i in range(60):  # 2 minutes max
             time.sleep(2)
             progress.progress(min(i * 2, 95))
             status.text(f"⏳ Transcribing... {i*2}s")
             
-            response = requests.get(f'https://api.assemblyai.com/v2/transcript/{transcript_id}', headers=headers)
-            result = response.json()
+            poll_response = requests.get(
+                f'https://api.assemblyai.com/v2/transcript/{transcript_id}',
+                headers=headers
+            )
             
-            if result['status'] == 'completed':
-                progress.progress(100)
-                status.text("✅ Complete!")
-                return result.get('text', '')
-            elif result['status'] == 'error':
-                return None
+            if poll_response.status_code == 200:
+                try:
+                    result = poll_response.json()
+                    status_text = result.get('status')
+                    
+                    if status_text == 'completed':
+                        progress.progress(100)
+                        status.text("✅ Complete!")
+                        return result.get('text', '')
+                    elif status_text == 'error':
+                        error_msg = result.get('error', 'Unknown error')
+                        st.error(f"Transcription error: {error_msg}")
+                        return None
+                except:
+                    pass
+        
+        st.error("Transcription timeout")
         return None
+        
     except Exception as e:
         st.error(f"Transcription error: {e}")
         return None
@@ -436,8 +599,9 @@ def main():
                     progress_bar.progress(progress)
                     
                     elapsed = time.time() - start_time
-                    remaining = (elapsed / idx) * (len(uploaded_files) - idx)
-                    time_text.text(f"⏱️ Elapsed: {elapsed:.1f}s | Remaining: {remaining:.1f}s")
+                    if idx > 0:
+                        remaining = (elapsed / idx) * (len(uploaded_files) - idx)
+                        time_text.text(f"⏱️ Elapsed: {elapsed:.1f}s | Remaining: {remaining:.1f}s")
                 
                 progress_bar.progress(1.0)
                 status_text.text("✅ All files processed!")
@@ -487,7 +651,7 @@ def main():
                         with col3:
                             st.metric("📝 Summary Words", summary_words)
                         with col4:
-                            reduction = int((1 - summary_words/words) * 100)
+                            reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
                             st.metric("📉 Reduced", f"{reduction}%")
                         
                         # Keywords
@@ -532,14 +696,16 @@ def main():
         
         if url and st.button("🌐 Fetch & Summarize", key="fetch_url"):
             if 'youtube.com' in url or 'youtu.be' in url:
-                with st.spinner("Fetching YouTube..."):
+                with st.spinner("Fetching YouTube content..."):
                     text, title, source = extract_youtube_content(url)
+                    
                     if text:
-                        st.success(f"✅ {title} ({source})")
+                        st.success(f"✅ {title}")
+                        st.info(f"📌 Source: {source}")
                         
                         # Create a temporary result
                         result = {
-                            'name': title,
+                            'name': title[:50],
                             'text': text,
                             'summary': generate_summary(text, 5),
                             'keywords': extract_keywords(text),
@@ -553,6 +719,22 @@ def main():
                         st.markdown("### 🌍 Current Affairs Format")
                         current_affairs = format_as_current_affairs(text, "YouTube")
                         st.markdown(current_affairs, unsafe_allow_html=True)
+                        
+                        # Statistics
+                        words = len(text.split())
+                        sentences = len(nltk.sent_tokenize(text))
+                        summary_words = len(result['summary'].split())
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("📊 Words", words)
+                        with col2:
+                            st.metric("🔤 Sentences", sentences)
+                        with col3:
+                            st.metric("📝 Summary Words", summary_words)
+                        with col4:
+                            reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
+                            st.metric("📉 Reduced", f"{reduction}%")
                         
                         # Keywords
                         st.markdown("### 🏷️ Keywords")
@@ -569,7 +751,8 @@ def main():
                             st.audio(audio)
                             st.download_button("🔊 Download Audio", audio, "summary.mp3")
                     else:
-                        st.warning("No content found")
+                        st.warning(f"⚠️ {source}")
+                        st.info("💡 Try downloading the video and uploading it directly in the File Upload tab.")
             elif validators.url(url):
                 with st.spinner("Fetching article..."):
                     text, title = extract_from_url(url)
@@ -577,7 +760,7 @@ def main():
                         st.success(f"✅ {title}")
                         
                         result = {
-                            'name': title,
+                            'name': title[:50],
                             'text': text,
                             'summary': generate_summary(text, 5),
                             'keywords': extract_keywords(text),
@@ -590,6 +773,21 @@ def main():
                         st.markdown("### 🌍 Current Affairs Format")
                         current_affairs = format_as_current_affairs(text, "Web Article")
                         st.markdown(current_affairs, unsafe_allow_html=True)
+                        
+                        words = len(text.split())
+                        sentences = len(nltk.sent_tokenize(text))
+                        summary_words = len(result['summary'].split())
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("📊 Words", words)
+                        with col2:
+                            st.metric("🔤 Sentences", sentences)
+                        with col3:
+                            st.metric("📝 Summary Words", summary_words)
+                        with col4:
+                            reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
+                            st.metric("📉 Reduced", f"{reduction}%")
                         
                         st.markdown("### 🏷️ Keywords")
                         html = "<div>"
@@ -631,6 +829,21 @@ def main():
                 html += "</div>"
                 st.markdown(html, unsafe_allow_html=True)
                 
+                words = len(text_input.split())
+                sentences = len(nltk.sent_tokenize(text_input))
+                summary_words = len(summary.split())
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("📊 Words", words)
+                with col2:
+                    st.metric("🔤 Sentences", sentences)
+                with col3:
+                    st.metric("📝 Summary Words", summary_words)
+                with col4:
+                    reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
+                    st.metric("📉 Reduced", f"{reduction}%")
+                
                 audio = text_to_speech(summary)
                 if audio:
                     st.audio(audio)
@@ -664,6 +877,13 @@ def main():
                 <li>🎵 Audio: MP3, WAV, M4A</li>
                 <li>📄 Document: PDF, TXT</li>
                 <li>🌐 Online: URLs, YouTube</li>
+            </ul>
+            
+            <h3>⚠️ YouTube Notes</h3>
+            <ul>
+                <li>Works best with videos that have captions</li>
+                <li>If no captions, shows video description</li>
+                <li>For best results, download video and upload directly</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
