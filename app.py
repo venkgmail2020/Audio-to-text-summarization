@@ -479,7 +479,7 @@ def get_bot_response(user_input, context=""):
     # Default response
     return "I'm not sure I understand. Try asking about: summary, keywords, or help."
 
-# ===== DISPLAY RESULTS (SIMPLIFIED) =====
+# ===== DISPLAY RESULTS WITH CURRENT AFFAIRS =====
 def display_results(text, source_name):
     if not text or len(text.strip()) == 0:
         st.error("No text to display")
@@ -528,14 +528,7 @@ def display_results(text, source_name):
     else:
         reduction = 0
     
-    st.session_state.history.append({
-        'time': datetime.now().strftime("%Y-%m-%d %H:%M"),
-        'source': source_name,
-        'summary': summary[:100] + "...",
-        'words': original_words,
-        'full_summary': summary
-    })
-    
+    # Summary Section
     st.markdown("## 📝 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
@@ -549,6 +542,26 @@ def display_results(text, source_name):
         st.metric("🔤 Sentences", f"{total_sentences:,}")
     with col4:
         st.metric("📉 Reduced", f"{reduction}%")
+    
+    # ===== CURRENT AFFAIRS SECTION =====
+    with st.expander("🌍 View as Current Affairs", expanded=False):
+        st.markdown("### 📰 Today's Headlines")
+        
+        sentences = nltk.sent_tokenize(text)
+        
+        for i, sent in enumerate(sentences[:10]):
+            if len(sent) > 30:
+                st.markdown(f"• {sent}")
+        
+        current_text = f"CURRENT AFFAIRS - {datetime.now().strftime('%B %d, %Y')}\n\n"
+        for i, sent in enumerate(sentences[:15]):
+            current_text += f"{i+1}. {sent}\n\n"
+        
+        st.download_button(
+            "📥 Download as Current Affairs",
+            current_text,
+            file_name=f"current_affairs_{datetime.now().strftime('%Y%m%d')}.txt"
+        )
     
     # Reading Time
     minutes = original_words // 200
@@ -582,60 +595,57 @@ def display_results(text, source_name):
             html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
-
-# ===== AI CHATBOT SECTION =====
-def display_chatbot():
-    st.markdown("### 🤖 AI Assistant")
+# ===== IMPROVED CHATBOT RESPONSE =====
+def get_bot_response(user_input, context=""):
+    """Improved chatbot with better responses"""
+    user_input = user_input.lower().strip()
     
-    # Initialize chat history
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
+    # If user_input is a URL (like YouTube), don't treat as question
+    if 'http' in user_input or 'youtube.com' in user_input or 'youtu.be' in user_input:
+        return "I notice you pasted a URL. Please use the URL/YouTube tab to process videos, not the chat."
     
-    # Chat container
-    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+    # Greetings
+    if any(word in user_input for word in ['hi', 'hello', 'hey', 'namaste', 'hy', 'hii', 'helo']):
+        return "👋 Hello! How can I help you with your summary today?"
     
-    # Display chat history
-    if not st.session_state.chat_history:
-        st.markdown("""
-        <div class='welcome-message'>
-            <h2>👋 Hello!</h2>
-            <p>Ask me anything about your summary or app features</p>
-            <p style='color: #666; margin-top: 20px;'>Type your message below and click Send</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        for msg in st.session_state.chat_history:
-            if msg['role'] == 'user':
-                st.markdown(f"<div class='user-message'>👤 {msg['content']}</div>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<div class='bot-message'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
+    if 'how are you' in user_input:
+        return "😊 I'm doing great! Thanks for asking. How can I assist you?"
     
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("<div class='clearfix'></div>", unsafe_allow_html=True)
+    if 'your name' in user_input or 'who are you' in user_input:
+        return "🤖 I'm your AI assistant for this Text Summarizer app. You can ask me questions about summaries!"
     
-    # Chat input
-    col1, col2 = st.columns([5, 1])
-    with col1:
-        user_input = st.text_input("", placeholder="Type your message here...", key="chat_input")
-    with col2:
-        send = st.button("📤 Send", key="send_btn", use_container_width=True)
+    # Questions about summary
+    if 'summary' in user_input or 'summarize' in user_input:
+        if context:
+            return f"📝 Your current summary has {len(context.split())} words. You can adjust the length using the slider above."
+        return "📝 No summary yet. Upload a file or paste text first in the File Upload tab!"
     
-    if send and user_input:
-        # Add user message
-        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
-        
-        # Get response
-        context = st.session_state.get('current_summary', '')
-        response = get_bot_response(user_input, context)
-        
-        # Add bot response
-        st.session_state.chat_history.append({'role': 'bot', 'content': response})
-        st.rerun()
+    # Questions about how to use
+    if 'how to use' in user_input or 'how do i' in user_input:
+        return "📌 To use this app: 1) Upload a file in File Upload tab, 2) Or paste a URL in URL tab, 3) Adjust summary length with slider, 4) Download results!"
     
-    # Clear button
-    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="clear_chat"):
-        st.session_state.chat_history = []
-        st.rerun()
+    # Questions about features
+    if 'feature' in user_input or 'what can you do' in user_input:
+        return "✨ I can help summarize videos, audio, PDFs, and URLs! Upload any file and I'll create a summary with keywords."
+    
+    # Questions about audio
+    if 'audio' in user_input or 'listen' in user_input:
+        return "🔊 After generating a summary, click the Audio download button to listen to it!"
+    
+    # Questions about keywords
+    if 'keyword' in user_input:
+        return "🏷️ Keywords are important words from your text. They appear as colored tags below the summary."
+    
+    # Questions about help
+    if 'help' in user_input:
+        return "ℹ️ Check the Help tab for detailed instructions on using all features."
+    
+    # Questions about supported formats
+    if 'supported' in user_input or 'format' in user_input:
+        return "📁 Supported: MP4, AVI, MOV (video), MP3, WAV, M4A (audio), PDF, TXT, URLs, and YouTube!"
+    
+    # Default response
+    return "🤔 I'm not sure I understand. Try asking about: summary, how to use, features, audio, keywords, or supported formats."
 
 # ===== MAIN UI =====
 def main():
