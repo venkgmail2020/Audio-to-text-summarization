@@ -906,4 +906,164 @@ def display_chatbot():
     
     if not st.session_state.chat_history:
         st.markdown("""
-        <div class='welcome-message
+        <div class='welcome-message'>
+            <h2>👋 Hello!</h2>
+            <p>Ask me anything about your summary or app features</p>
+            <p style='color: #888; margin-top: 20px;'>Type your message below and click Send</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        for msg in st.session_state.chat_history:
+            if msg['role'] == 'user':
+                st.markdown(f"<div class='user-message'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='bot-message'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='clearfix'></div>", unsafe_allow_html=True)
+    
+    # Chat input
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        user_input = st.text_input("", placeholder="Type your message here...", key="chat_input", label_visibility="collapsed")
+    with col2:
+        send = st.button("📤 Send", key="send_btn", use_container_width=True)
+    
+    if send and user_input:
+        # Add user message
+        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
+        
+        # Get response
+        context = st.session_state.get('current_summary', '')
+        
+        if has_gemini:
+            with st.spinner("🤔 Thinking..."):
+                response = get_gemini_response(user_input, context)
+        else:
+            response = get_simple_response(user_input, context)
+        
+        # Add bot response
+        st.session_state.chat_history.append({'role': 'bot', 'content': response})
+        st.rerun()
+    
+    # Clear button
+    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="clear_chat"):
+        st.session_state.chat_history = []
+        st.rerun()
+
+# ===== MAIN UI =====
+def main():
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "🤖 AI Chat", "ℹ️ Help"])
+    
+    with tab1:
+        uploaded_file = st.file_uploader(
+            "Choose file",
+            type=['mp4', 'avi', 'mov', 'mp3', 'wav', 'm4a', 'pdf', 'txt']
+        )
+        
+        if uploaded_file:
+            file_ext = uploaded_file.name.split('.')[-1].lower()
+            file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
+            st.info(f"📊 {uploaded_file.name} | {file_size:.2f} MB")
+            
+            if file_ext in ['mp4', 'avi', 'mov']:
+                st.video(uploaded_file)
+            elif file_ext in ['mp3', 'wav', 'm4a']:
+                st.audio(uploaded_file)
+            
+            if st.button("🚀 Process", key="proc_file"):
+                with st.spinner("Processing..."):
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        path = tmp.name
+                    
+                    if file_ext == 'pdf':
+                        text = extract_pdf_text(path)
+                        if text:
+                            st.success("✅ Extracted PDF")
+                            display_results(text, "pdf")
+                    elif file_ext == 'txt':
+                        with open(path, 'r', encoding='utf-8') as f:
+                            text = f.read()
+                        display_results(text, "text")
+                    else:
+                        if not st.session_state.assemblyai_key:
+                            st.error("❌ AssemblyAI Key required")
+                        else:
+                            text = transcribe_with_assemblyai(path)
+                            if text:
+                                st.success(f"✅ Transcribed: {len(text)} chars")
+                                display_results(text, "media")
+                    
+                    os.unlink(path)
+    
+    with tab2:
+        url = st.text_input("Enter URL", placeholder="https://...")
+        
+        if url and st.button("🌐 Fetch", key="fetch_url"):
+            if 'youtube.com' in url or 'youtu.be' in url:
+                with st.spinner("Fetching YouTube..."):
+                    text, title, content_type = extract_youtube_content(url)
+                    if text:
+                        st.success(f"✅ {title}")
+                        if content_type == "description":
+                            st.info("ℹ️ Showing video description (no captions available)")
+                        display_results(text, "youtube")
+                    else:
+                        st.warning("No content found")
+            elif validators.url(url):
+                with st.spinner("Fetching article..."):
+                    text, title = extract_from_url(url)
+                    if text:
+                        st.success(f"✅ {title}")
+                        display_results(text, "web")
+                    else:
+                        st.warning("No content found")
+            else:
+                st.error("Invalid URL")
+    
+    with tab3:
+        text_input = st.text_area("Paste text", height=200)
+        if text_input and st.button("📝 Summarize", key="summ_text"):
+            if len(text_input) > 100:
+                display_results(text_input, "pasted")
+            else:
+                st.warning("Text too short")
+    
+    with tab4:
+        display_chatbot()
+    
+    with tab5:
+        st.markdown("""
+        <div class='section-card'>
+            <h3>📌 How to Use</h3>
+            <ol>
+                <li><strong>Get API Keys:</strong>
+                    <ul>
+                        <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
+                        <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
+                    </ul>
+                </li>
+                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
+                <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
+                <li><strong>Two Views:</strong> Normal Summary & Current Affairs Format</li>
+                <li><strong>Ask AI:</strong> Use AI Chat tab for questions</li>
+                <li><strong>Download:</strong> Get text, summary, or audio</li>
+            </ol>
+            
+            <h3>✨ Features</h3>
+            <ul>
+                <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
+                <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
+                <li>🌍 <strong>Current Affairs Format</strong> - News-style presentation</li>
+                <li>☁️ <strong>Word Cloud</strong> - Visual keywords</li>
+                <li>📱 <strong>QR Code</strong> - Share on mobile</li>
+                <li>🌐 <strong>Translation</strong> - Telugu, Hindi, Tamil</li>
+                <li>🤖 <strong>AI Chatbot</strong> - Ask questions about content</li>
+                <li>📥 <strong>Download</strong> - Text, summary, audio</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
