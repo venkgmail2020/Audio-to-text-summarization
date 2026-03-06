@@ -18,8 +18,16 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import validators
 import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
+from youtube_transcript_api import YouTubeTranscriptApi
 from datetime import datetime
+
+# ===== GEMINI AI IMPORTS =====
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    st.warning("⚠️ google-generativeai not installed. Run: pip install google-generativeai")
 
 # ===== NLTK DOWNLOAD =====
 try:
@@ -37,92 +45,101 @@ except:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-st.set_page_config(page_title="Multi-File Summarizer", page_icon="📁", layout="wide")
+st.set_page_config(page_title="Audio to Text Summarizer Using NLP", page_icon="🎤", layout="wide")
 
 # ===== CUSTOM CSS =====
 st.markdown("""
 <style>
+    .stApp { background: white !important; }
+    .stApp, .stMarkdown, p, h1, h2, h3, h4, h5, h6, label { color: black !important; }
+    .stTextInput > div > div > input {
+        background: white !important; color: black !important; border: 1px solid #ccc !important;
+        border-radius: 8px !important;
+    }
     .main-header {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
-        padding: 2rem;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin-bottom: 2rem;
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important;
+        padding: 2rem !important; border-radius: 15px !important; color: white !important;
+        text-align: center !important; margin-bottom: 2rem !important;
     }
+    .main-header h1, .main-header p { color: white !important; }
     .section-card {
-        background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 5px solid #ff6b6b;
-        margin: 1rem 0;
+        background: #f8f9fa !important; padding: 1.5rem !important; border-radius: 10px !important;
+        border-left: 5px solid #ff6b6b !important; margin: 1rem 0 !important; color: black !important;
     }
-    .keyword-tag {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
-        color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        display: inline-block;
-        margin: 0.2rem;
-        font-size: 0.9rem;
+    .stButton > button {
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important; color: white !important;
+        border: none !important; padding: 0.5rem 1.5rem !important; border-radius: 25px !important;
+        font-weight: bold !important; width: 100% !important;
     }
-    .file-card {
-        background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 3px solid #ff6b6b;
-        margin: 0.5rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    .chat-container {
+        background: #f8f9fa !important; border-radius: 15px !important; padding: 20px !important;
+        min-height: 400px !important; max-height: 500px !important; margin-bottom: 20px !important;
+        border: 1px solid #ddd !important; overflow-y: auto !important;
     }
-    .stProgress > div > div {
-        background-color: #ff6b6b !important;
+    .user-message {
+        background: linear-gradient(135deg, #ff6b6b, #556270) !important; color: white !important;
+        padding: 12px 18px !important; border-radius: 20px 20px 5px 20px !important;
+        margin: 10px 0 10px auto !important; max-width: 80% !important; width: fit-content !important;
+        float: right !important; clear: both !important;
     }
-    .current-affairs {
-        background: #f0f2f6;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #ff6b6b;
-        margin: 1rem 0;
+    .bot-message {
+        background: #e9ecef !important; color: black !important; padding: 12px 18px !important;
+        border-radius: 20px 20px 20px 5px !important; margin: 10px auto 10px 0 !important;
+        max-width: 80% !important; width: fit-content !important; float: left !important;
+        clear: both !important; border: 1px solid #dee2e6 !important;
     }
-    .success-box {
-        background: #d4edda;
-        color: #155724;
-        padding: 1rem;
-        border-radius: 5px;
-        border-left: 4px solid #28a745;
-    }
-    .warning-box {
-        background: #fff3cd;
-        color: #856404;
-        padding: 1rem;
-        border-radius: 5px;
-        border-left: 4px solid #ffc107;
-    }
+    .welcome-message { text-align: center !important; padding: 80px 20px !important; color: #666 !important; }
+    .welcome-message h2 { color: #ff6b6b !important; font-size: 2.5em !important; }
+    [data-testid="stSidebar"] { background-color: #f8f9fa !important; }
+    [data-testid="stSidebar"] * { color: black !important; }
+    .clearfix::after { content: ""; clear: both; display: table; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>📁 Multi-File Summarizer</h1><p>Upload multiple files - Get summaries, keywords, audio & current affairs</p></div>", unsafe_allow_html=True)
+# ===== HEADER =====
+st.markdown("""
+<div class='main-header'>
+    <h1>🎤 Audio to Text Summarizer Using NLP</h1>
+    <p style='font-size: 1.2rem;'>Transform Audio | Video | PDF | Text | URL into Smart Summaries</p>
+</div>
+""", unsafe_allow_html=True)
 
-# ===== SESSION STATE =====
+# ===== SESSION STATE INITIALIZATION =====
 if 'assemblyai_key' not in st.session_state:
     st.session_state.assemblyai_key = ''
-if 'processed_files' not in st.session_state:
-    st.session_state.processed_files = []
+if 'gemini_key' not in st.session_state:
+    st.session_state.gemini_key = ''
+if 'current_text' not in st.session_state:
+    st.session_state.current_text = ''
+if 'current_summary' not in st.session_state:
+    st.session_state.current_summary = ''
+if 'slider_value' not in st.session_state:
+    st.session_state.slider_value = 5
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
 
 # ===== SIDEBAR =====
 with st.sidebar:
     st.markdown("### 🔐 API Configuration")
     
     assembly_key = st.text_input(
-        "🗝️ AssemblyAI Key (For Video/Audio)",
+        "🗝️ AssemblyAI Key",
         value=st.session_state.assemblyai_key,
         type="password",
         placeholder="Enter your AssemblyAI key"
     )
     
+    gemini_key = st.text_input(
+        "🤖 Google Gemini Key (Required for AI Chat)",
+        value=st.session_state.gemini_key,
+        type="password",
+        placeholder="Paste your new Gemini API key here"
+    )
+    
     if st.button("💾 Save Keys", use_container_width=True):
         st.session_state.assemblyai_key = assembly_key
-        st.success("✅ Keys saved!")
+        st.session_state.gemini_key = gemini_key
+        st.success("✅ Keys saved! Now use AI Chat tab.")
     
     st.markdown("---")
     st.markdown("### 📌 Supported Formats")
@@ -148,251 +165,89 @@ def extract_pdf_text(pdf_path):
 # ===== URL EXTRACTION =====
 def extract_from_url(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        response = requests.get(url, headers=headers, timeout=15)
-        
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            
             for element in soup(['script', 'style', 'nav', 'header', 'footer']):
                 element.decompose()
-            
             paragraphs = soup.find_all('p')
             text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 30])
             text = re.sub(r'\s+', ' ', text).strip()
-            
             title = soup.title.string if soup.title else "Article"
-            
             if text and len(text) > 200:
                 return text, title
-        return None, "No content found"
-    except Exception as e:
-        return None, f"Error: {str(e)}"
+        return None, None
+    except:
+        return None, None
 
-# ===== IMPROVED YOUTUBE EXTRACTION =====
+# ===== YOUTUBE EXTRACTION =====
 def extract_youtube_content(url):
-    """Better YouTube extraction with multiple fallbacks"""
     try:
-        # Extract video ID
         video_id = None
         if 'youtube.com/watch?v=' in url:
             video_id = url.split('watch?v=')[-1].split('&')[0]
         elif 'youtu.be/' in url:
             video_id = url.split('youtu.be/')[-1].split('?')[0]
-        
         if not video_id:
-            return None, None, "Invalid YouTube URL"
+            return None, None, None
         
-        # Try multiple approaches
-        
-        # Approach 1: Try to get video info using yt-dlp first
-        try:
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                title = info.get('title', 'YouTube Video')
-                description = info.get('description', '')
-                uploader = info.get('uploader', 'Unknown')
-                
-                # If we have description, use it
-                if description and len(description) > 100:
-                    return description, f"{title} - {uploader}", "Description"
-                
-                # If description is short but we have metadata
-                if description:
-                    return description, f"{title} - {uploader}", "Description (Limited)"
-        except Exception as e:
-            st.warning(f"yt-dlp info error: {e}")
-        
-        # Approach 2: Try transcripts
+        # Try transcript first
         try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            
-            # Try different languages
-            for lang in ['te', 'en', 'hi', 'ta', 'kn', 'ml', 'bn', 'gu']:
+            for lang in ['te', 'en', 'hi']:
                 try:
                     transcript = transcript_list.find_transcript([lang])
                     transcript_data = transcript.fetch()
                     full_text = ' '.join([item['text'] for item in transcript_data])
-                    
-                    # Try to get title
-                    try:
-                        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-                            info = ydl.extract_info(url, download=False)
-                            title = info.get('title', 'YouTube Video')
-                    except:
-                        title = "YouTube Video"
-                    
-                    return full_text, f"{title} (Captions)", "Captions"
+                    with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                        title = info.get('title', 'YouTube Video')
+                    return full_text, f"YouTube: {title}", "transcript"
                 except:
                     continue
         except:
             pass
         
-        # Approach 3: Try with different User-Agent and browser-like headers
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            }
-            response = requests.get(f"https://www.youtube.com/watch?v={video_id}", headers=headers, timeout=10)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Try to get title
-                title_tag = soup.find('title')
-                title = title_tag.text.replace(' - YouTube', '') if title_tag else "YouTube Video"
-                
-                # Try to get description from meta tags
-                desc_tag = soup.find('meta', {'name': 'description'})
-                if desc_tag:
-                    description = desc_tag.get('content', '')
-                    if description and len(description) > 100:
-                        return description, title, "Meta Description"
-                
-                # Try to get description from other meta tags
-                og_desc = soup.find('meta', {'property': 'og:description'})
-                if og_desc:
-                    description = og_desc.get('content', '')
-                    if description and len(description) > 100:
-                        return description, title, "Open Graph Description"
-        except:
-            pass
-        
-        # Approach 4: If nothing works, provide info about video
-        try:
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
-                info = ydl.extract_info(url, download=False)
-                title = info.get('title', 'YouTube Video')
-                duration = info.get('duration', 0)
-                uploader = info.get('uploader', 'Unknown')
-                view_count = info.get('view_count', 0)
-                
-                # Create a summary from available metadata
-                minutes = duration // 60
-                seconds = duration % 60
-                
-                metadata_text = f"""
-Title: {title}
-Uploader: {uploader}
-Duration: {minutes} minutes {seconds} seconds
-Views: {view_count:,}
-
-This video has no captions available. To get the content:
-1. Download the video and upload it directly
-2. Or check if captions are available in other languages
-"""
-                return metadata_text, f"{title} - Metadata Only", "Metadata"
-        except Exception as e:
-            return None, None, f"Could not extract: {str(e)}"
-        
-    except Exception as e:
-        return None, None, f"YouTube extraction error: {str(e)}"
+        # Fallback to description
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get('title', 'YouTube Video')
+            description = info.get('description', '')
+            if description:
+                return description, f"YouTube: {title}", "description"
+        return None, None, None
+    except:
+        return None, None, None
 
 # ===== ASSEMBLYAI TRANSCRIPTION =====
 def transcribe_with_assemblyai(audio_path):
-    """Transcribe audio with better error handling"""
     try:
-        api_key = st.session_state.get('assemblyai_key', '').strip()
+        headers = {'authorization': st.session_state.assemblyai_key}
+        with open(audio_path, 'rb') as f:
+            response = requests.post('https://api.assemblyai.com/v2/upload', headers=headers, data=f)
+        upload_url = response.json()['upload_url']
         
-        if not api_key:
-            st.error("❌ AssemblyAI Key is required")
-            return None
+        transcript_request = {
+            'audio_url': upload_url,
+            'language_detection': True,
+            'speech_models': ['universal-2']
+        }
+        response = requests.post('https://api.assemblyai.com/v2/transcript', json=transcript_request, headers=headers)
+        transcript_id = response.json()['id']
         
-        headers = {'authorization': api_key}
-        
-        # Step 1: Upload file
-        with st.spinner("📤 Uploading to AssemblyAI..."):
-            with open(audio_path, 'rb') as f:
-                upload_response = requests.post(
-                    'https://api.assemblyai.com/v2/upload',
-                    headers=headers,
-                    data=f
-                )
-            
-            # Check upload response
-            if upload_response.status_code != 200:
-                st.error(f"Upload failed: {upload_response.status_code}")
-                return None
-            
-            try:
-                upload_data = upload_response.json()
-                upload_url = upload_data.get('upload_url')
-                if not upload_url:
-                    st.error("No upload_url in response")
-                    return None
-            except:
-                st.error("Invalid JSON response from upload")
-                return None
-        
-        # Step 2: Request transcription
-        with st.spinner("⏳ Requesting transcription..."):
-            transcript_request = {
-                'audio_url': upload_url,
-                'language_detection': True,
-                'speech_models': ['universal-2']
-            }
-            
-            transcribe_response = requests.post(
-                'https://api.assemblyai.com/v2/transcript',
-                json=transcript_request,
-                headers=headers
-            )
-            
-            if transcribe_response.status_code != 200:
-                st.error(f"Transcription request failed: {transcribe_response.status_code}")
-                return None
-            
-            try:
-                transcribe_data = transcribe_response.json()
-                transcript_id = transcribe_data.get('id')
-                if not transcript_id:
-                    st.error("No transcript ID in response")
-                    return None
-            except:
-                st.error("Invalid JSON response from transcription")
-                return None
-        
-        # Step 3: Poll for results
         progress = st.progress(0)
-        status = st.empty()
-        
-        for i in range(60):  # 2 minutes max
+        for i in range(60):
             time.sleep(2)
             progress.progress(min(i * 2, 95))
-            status.text(f"⏳ Transcribing... {i*2}s")
-            
-            poll_response = requests.get(
-                f'https://api.assemblyai.com/v2/transcript/{transcript_id}',
-                headers=headers
-            )
-            
-            if poll_response.status_code == 200:
-                try:
-                    result = poll_response.json()
-                    status_text = result.get('status')
-                    
-                    if status_text == 'completed':
-                        progress.progress(100)
-                        status.text("✅ Complete!")
-                        return result.get('text', '')
-                    elif status_text == 'error':
-                        error_msg = result.get('error', 'Unknown error')
-                        st.error(f"Transcription error: {error_msg}")
-                        return None
-                except:
-                    pass
-        
-        st.error("Transcription timeout")
+            response = requests.get(f'https://api.assemblyai.com/v2/transcript/{transcript_id}', headers=headers)
+            result = response.json()
+            if result['status'] == 'completed':
+                return result.get('text', '')
+            elif result['status'] == 'error':
+                return None
         return None
-        
-    except Exception as e:
-        st.error(f"Transcription error: {e}")
+    except:
         return None
 
 # ===== TEXT TO SPEECH =====
@@ -409,7 +264,7 @@ def text_to_speech(text):
         return None
 
 # ===== GENERATE SUMMARY =====
-def generate_summary(text, num_points=5):
+def generate_summary(text, num_points):
     sentences = nltk.sent_tokenize(text)
     if len(sentences) <= num_points:
         return text
@@ -431,459 +286,305 @@ def generate_summary(text, num_points=5):
     top_indices = sorted(sentence_scores, key=sentence_scores.get, reverse=True)[:num_points]
     top_indices.sort()
     
-    summary = f"📌 **KEY POINTS ({num_points} of {len(sentences)} sentences)**\n\n"
+    summary = f"🎯 **KEY POINTS ({num_points} of {len(sentences)} sentences)**\n\n"
     for i, idx in enumerate(top_indices, 1):
         summary += f"{i}. {sentences[idx]}\n\n"
     return summary
 
-# ===== EXTRACT KEYWORDS =====
-def extract_keywords(text, num=15):
-    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    stop_words = set(nltk.corpus.stopwords.words('english'))
-    filtered = [w for w in words if w not in stop_words]
-    return Counter(filtered).most_common(num)
+# ===== GEMINI AI RESPONSE (REAL AI) =====
+def get_gemini_response(user_input, context=""):
+    """Real AI response using Google Gemini"""
+    try:
+        # Get API key from session state
+        api_key = st.session_state.get('gemini_key', '')
+        
+        if not api_key:
+            return "⚠️ Please add your Google Gemini API key in the sidebar first!"
+        
+        # Configure Gemini
+        genai.configure(api_key=api_key)
+        
+        # Use the CORRECT model name
+        model = genai.GenerativeModel('models/gemini-2.0-flash')
+        
+        # Create prompt
+        prompt = f"""You are a helpful AI assistant for a Text Summarizer app called "Audio to Text Summarizer Using NLP".
+        
+Current context from user's uploaded content: {context[:1000] if context else 'No content uploaded yet'}
 
-# ===== FORMAT AS CURRENT AFFAIRS =====
-def format_as_current_affairs(text, source_name):
-    sentences = nltk.sent_tokenize(text)
-    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    keywords = Counter(words).most_common(10)
-    
-    current_affairs = f"""
-<div class='current-affairs'>
-    <h3>🌍 TODAY'S CURRENT AFFAIRS</h3>
-    <p>📅 {datetime.now().strftime("%B %d, %Y")} | 📰 Source: {source_name}</p>
-    <hr>
-"""
-    
-    # Main headlines (first 5 sentences)
-    current_affairs += "<h4>📰 HEADLINES</h4><ul>"
-    for i, sent in enumerate(sentences[:5]):
-        if len(sent) > 30:
-            current_affairs += f"<li>{sent[:150]}...</li>"
-    current_affairs += "</ul>"
-    
-    # Key terms
-    current_affairs += "<h4>🔑 KEY TERMS</h4><p>"
-    for word, count in keywords[:8]:
-        current_affairs += f"<span class='keyword-tag'>#{word}</span> "
-    current_affairs += "</p>"
-    
-    # Stats
-    current_affairs += f"""
-    <h4>📊 QUICK STATS</h4>
-    <ul>
-        <li>Total Sentences: {len(sentences)}</li>
-        <li>Reading Time: {len(text.split())//200} min</li>
-    </ul>
-</div>
-"""
-    return current_affairs
+The app can:
+- Transcribe audio/video files using AssemblyAI
+- Extract text from PDFs and URLs
+- Generate summaries using LexRank algorithm
+- Show keywords from the text
+- Convert text to speech
 
-# ===== PROCESS SINGLE FILE =====
-def process_single_file(file, file_ext, progress_bar, status_text, file_num, total_files):
-    """Process one file with progress tracking"""
+User question: {user_input}
+
+Provide a helpful, friendly, and accurate answer. Be conversational and use emojis occasionally.
+"""
+        
+        response = model.generate_content(prompt)
+        return response.text
+        
+    except Exception as e:
+        return f"❌ Error: {str(e)}. Please check your Gemini API key."
+
+# ===== DISPLAY CHATBOT WITH REAL AI =====
+def display_chatbot():
+    st.markdown("### 🤖 AI Assistant (Powered by Google Gemini)")
     
-    status_text.text(f"📁 Processing file {file_num}/{total_files}: {file.name}")
+    # Check if API key exists
+    if not st.session_state.gemini_key:
+        st.warning("⚠️ Please add your Google Gemini API key in the sidebar to use the AI chatbot.")
+        
+        # Show input for API key directly
+        temp_key = st.text_input("Enter Gemini API Key:", type="password", key="temp_gemini")
+        if st.button("Save and Continue", key="save_temp"):
+            st.session_state.gemini_key = temp_key
+            st.rerun()
+        return
     
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp:
-        tmp.write(file.getvalue())
-        path = tmp.name
+    st.success("✅ Gemini AI is connected! Ask me anything.")
     
-    result = {'name': file.name, 'status': 'error', 'error': 'Unknown error'}
+    # Chat container
+    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     
-    if file_ext == 'pdf':
-        text = extract_pdf_text(path)
-        if text:
-            summary = generate_summary(text, 5)
-            keywords = extract_keywords(text)
-            result = {
-                'name': file.name,
-                'text': text,
-                'summary': summary,
-                'keywords': keywords,
-                'status': 'success'
-            }
-        else:
-            result = {'name': file.name, 'status': 'error', 'error': 'Could not extract text'}
-    
-    elif file_ext == 'txt':
-        with open(path, 'r', encoding='utf-8') as f:
-            text = f.read()
-        summary = generate_summary(text, 5)
-        keywords = extract_keywords(text)
-        result = {
-            'name': file.name,
-            'text': text,
-            'summary': summary,
-            'keywords': keywords,
-            'status': 'success'
-        }
-    
-    else:  # Audio/Video
-        if not st.session_state.assemblyai_key:
-            result = {'name': file.name, 'status': 'error', 'error': 'AssemblyAI key required'}
-        else:
-            for i in range(5):
-                time.sleep(0.5)
-                progress = (file_num - 1 + (i+1)/5) / total_files
-                progress_bar.progress(progress)
-                status_text.text(f"🎤 Transcribing {file.name}... {i*20}%")
-            
-            text = transcribe_with_assemblyai(path)
-            if text:
-                summary = generate_summary(text, 5)
-                keywords = extract_keywords(text)
-                result = {
-                    'name': file.name,
-                    'text': text,
-                    'summary': summary,
-                    'keywords': keywords,
-                    'status': 'success'
-                }
+    # Display chat history
+    if not st.session_state.chat_history:
+        st.markdown("""
+        <div class='welcome-message'>
+            <h2>👋 Hello! I'm your AI Assistant</h2>
+            <p>Ask me anything about your summaries, the app, or any general questions!</p>
+            <p style='color: #666; margin-top: 20px;'>Examples:</p>
+            <p style='color: #666;'>• "Summarize this text for me"</p>
+            <p style='color: #666;'>• "What are keywords?"</p>
+            <p style='color: #666;'>• "How does LexRank work?"</p>
+            <p style='color: #666;'>• "What is the capital of France?"</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        for msg in st.session_state.chat_history:
+            if msg['role'] == 'user':
+                st.markdown(f"<div class='user-message'>👤 {msg['content']}</div>", unsafe_allow_html=True)
             else:
-                result = {'name': file.name, 'status': 'error', 'error': 'Transcription failed'}
+                st.markdown(f"<div class='bot-message'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
     
-    os.unlink(path)
-    return result
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='clearfix'></div>", unsafe_allow_html=True)
+    
+    # Chat input
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        user_input = st.text_input("", placeholder="Ask me anything...", key="gemini_input")
+    with col2:
+        send = st.button("📤 Send", key="gemini_send", use_container_width=True)
+    
+    if send and user_input:
+        # Add user message
+        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
+        
+        # Get AI response
+        context = st.session_state.get('current_summary', '')
+        with st.spinner("🤔 Thinking..."):
+            response = get_gemini_response(user_input, context)
+        
+        # Add bot response
+        st.session_state.chat_history.append({'role': 'bot', 'content': response})
+        st.rerun()
+    
+    # Clear button
+    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="gemini_clear"):
+        st.session_state.chat_history = []
+        st.rerun()
+
+# ===== DISPLAY RESULTS =====
+def display_results(text, source_name):
+    if not text or len(text.strip()) == 0:
+        st.error("No text to display")
+        return
+    
+    st.session_state.current_text = text
+    total_sentences = len(nltk.sent_tokenize(text))
+    original_words = len(text.split())
+    original_chars = len(text)
+    
+    st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        if total_sentences < 3:
+            st.warning(f"⚠️ Only {total_sentences} sentence(s)")
+            num_points = total_sentences
+        else:
+            max_val = min(30, total_sentences)
+            num_points = st.slider(
+                "📊 Number of summary sentences:",
+                min_value=3, max_value=max_val,
+                value=st.session_state.slider_value, key="main_slider"
+            )
+            st.session_state.slider_value = num_points
+    
+    with col2:
+        st.metric("Total", total_sentences)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    if total_sentences <= num_points:
+        summary = text
+        summary_words = original_words
+        st.info(f"ℹ️ Text has only {total_sentences} sentences. Showing full text.")
+    else:
+        summary = generate_summary(text, num_points)
+        summary_words = len(summary.split())
+    
+    st.session_state.current_summary = summary
+    
+    if original_words > 0 and summary_words < original_words:
+        reduction = int((1 - summary_words/original_words) * 100)
+    else:
+        reduction = 0
+    
+    # Summary Section
+    st.markdown("## 📝 Summary")
+    st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
+    
+    # Statistics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("📊 Characters", f"{original_chars:,}")
+    with col2: st.metric("📈 Words", f"{original_words:,}")
+    with col3: st.metric("🔤 Sentences", f"{total_sentences:,}")
+    with col4: st.metric("📉 Reduced", f"{reduction}%")
+    
+    # Current Affairs Section
+    with st.expander("🌍 View as Current Affairs", expanded=False):
+        st.markdown("### 📰 Today's Headlines")
+        sentences = nltk.sent_tokenize(text)
+        for i, sent in enumerate(sentences[:10]):
+            if len(sent) > 30:
+                st.markdown(f"• {sent}")
+        
+        current_text = f"CURRENT AFFAIRS - {datetime.now().strftime('%B %d, %Y')}\n\n"
+        for i, sent in enumerate(sentences[:15]):
+            current_text += f"{i+1}. {sent}\n\n"
+        
+        st.download_button(
+            "📥 Download as Current Affairs",
+            current_text,
+            file_name=f"current_affairs_{datetime.now().strftime('%Y%m%d')}.txt"
+        )
+    
+    # Reading Time
+    minutes = original_words // 200
+    seconds = int((original_words % 200) / 200 * 60)
+    st.metric("⏳ Reading Time", f"{minutes} min {seconds} sec")
+    
+    # Downloads
+    st.markdown("### 📥 Downloads")
+    col1, col2, col3 = st.columns(3)
+    with col1: st.download_button("📄 Full Text", text, f"{source_name}_full.txt")
+    with col2: st.download_button("📝 Summary", summary, f"{source_name}_summary.txt")
+    with col3:
+        audio = text_to_speech(summary)
+        if audio:
+            st.audio(audio, format='audio/mp3')
+            st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3", "audio/mp3")
+    
+    # Keywords
+    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+    if words:
+        keywords = Counter(words).most_common(15)
+        st.markdown("### 🏷️ Keywords")
+        html = "<div>"
+        for word, count in keywords[:12]:
+            size = min(24 + count, 40)
+            html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
+        html += "</div>"
+        st.markdown(html, unsafe_allow_html=True)
 
 # ===== MAIN UI =====
 def main():
-    tab1, tab2, tab3, tab4 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "ℹ️ Help"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "🤖 AI Chat", "ℹ️ Help"])
     
     with tab1:
-        st.markdown("### 📤 Upload Multiple Files")
-        uploaded_files = st.file_uploader(
-            "Choose files (PDF, TXT, MP4, MP3, etc.)",
-            type=['pdf', 'txt', 'mp4', 'mp3', 'wav', 'avi', 'mov'],
-            accept_multiple_files=True,
-            key="multi_upload"
-        )
-        
-        if uploaded_files:
-            st.markdown(f"📊 **Total files:** {len(uploaded_files)}")
+        uploaded_file = st.file_uploader("Choose file", type=['mp4', 'avi', 'mov', 'mp3', 'wav', 'm4a', 'pdf', 'txt'])
+        if uploaded_file:
+            file_ext = uploaded_file.name.split('.')[-1].lower()
+            file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
+            st.info(f"📊 {uploaded_file.name} | {file_size:.2f} MB")
             
-            # Show file list
-            with st.expander("📋 Selected Files", expanded=True):
-                for file in uploaded_files:
-                    size = len(file.getvalue()) / (1024 * 1024)
-                    st.markdown(f"""
-                    <div class='file-card'>
-                        <b>{file.name}</b> | {size:.2f} MB
-                    </div>
-                    """, unsafe_allow_html=True)
+            if file_ext in ['mp4', 'avi', 'mov']: st.video(uploaded_file)
+            elif file_ext in ['mp3', 'wav', 'm4a']: st.audio(uploaded_file)
             
-            # Process button
-            if st.button("🚀 Process All Files", type="primary", use_container_width=True):
-                
-                # Progress section
-                st.markdown("### 📊 Processing Progress")
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                time_text = st.empty()
-                
-                results = []
-                start_time = time.time()
-                
-                for idx, file in enumerate(uploaded_files, 1):
-                    file_ext = file.name.split('.')[-1].lower()
+            if st.button("🚀 Process", key="proc_file"):
+                with st.spinner("Processing..."):
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        path = tmp.name
                     
-                    result = process_single_file(
-                        file, file_ext, 
-                        progress_bar, status_text, 
-                        idx, len(uploaded_files)
-                    )
-                    results.append(result)
-                    
-                    progress = idx / len(uploaded_files)
-                    progress_bar.progress(progress)
-                    
-                    elapsed = time.time() - start_time
-                    if idx > 0:
-                        remaining = (elapsed / idx) * (len(uploaded_files) - idx)
-                        time_text.text(f"⏱️ Elapsed: {elapsed:.1f}s | Remaining: {remaining:.1f}s")
-                
-                progress_bar.progress(1.0)
-                status_text.text("✅ All files processed!")
-                st.session_state.processed_files = results
-                st.success(f"✅ Successfully processed {len(results)} files!")
-        
-        # Display results
-        if st.session_state.processed_files:
-            st.markdown("---")
-            st.markdown("## 📊 Results")
-            
-            # Statistics
-            success = sum(1 for r in st.session_state.processed_files if r['status'] == 'success')
-            failed = len(st.session_state.processed_files) - success
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Files", len(st.session_state.processed_files))
-            with col2:
-                st.metric("✅ Success", success)
-            with col3:
-                st.metric("❌ Failed", failed)
-            
-            # Show each file's result
-            for idx, result in enumerate(st.session_state.processed_files):
-                with st.expander(f"📄 {result['name']}", expanded=(idx==0)):
-                    if result['status'] == 'success':
-                        # Normal Summary
-                        st.markdown("### 📝 Summary")
-                        st.info(result['summary'])
-                        
-                        # Current Affairs Format
-                        st.markdown("### 🌍 Current Affairs Format")
-                        current_affairs = format_as_current_affairs(result['text'], result['name'])
-                        st.markdown(current_affairs, unsafe_allow_html=True)
-                        
-                        # Statistics
-                        words = len(result['text'].split())
-                        sentences = len(nltk.sent_tokenize(result['text']))
-                        summary_words = len(result['summary'].split())
-                        
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("📊 Words", words)
-                        with col2:
-                            st.metric("🔤 Sentences", sentences)
-                        with col3:
-                            st.metric("📝 Summary Words", summary_words)
-                        with col4:
-                            reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
-                            st.metric("📉 Reduced", f"{reduction}%")
-                        
-                        # Keywords
-                        st.markdown("### 🏷️ Keywords")
-                        html = "<div>"
-                        for word, count in result['keywords'][:12]:
-                            size = min(24 + count, 40)
-                            html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
-                        html += "</div>"
-                        st.markdown(html, unsafe_allow_html=True)
-                        
-                        # Downloads
-                        st.markdown("### 📥 Downloads")
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.download_button(
-                                "📄 Full Text",
-                                result['text'],
-                                file_name=f"{result['name']}_full.txt"
-                            )
-                        with col2:
-                            st.download_button(
-                                "📝 Summary",
-                                result['summary'],
-                                file_name=f"{result['name']}_summary.txt"
-                            )
-                        with col3:
-                            audio = text_to_speech(result['summary'])
-                            if audio:
-                                st.audio(audio)
-                                st.download_button(
-                                    "🔊 Audio",
-                                    audio,
-                                    file_name=f"{result['name']}_audio.mp3"
-                                )
+                    if file_ext == 'pdf':
+                        text = extract_pdf_text(path)
+                        if text: st.success("✅ Extracted PDF"); display_results(text, "pdf")
+                    elif file_ext == 'txt':
+                        with open(path, 'r', encoding='utf-8') as f: text = f.read()
+                        display_results(text, "text")
                     else:
-                        st.error(f"❌ Error: {result.get('error', 'Unknown error')}")
+                        if not st.session_state.assemblyai_key:
+                            st.error("❌ AssemblyAI Key required")
+                        else:
+                            text = transcribe_with_assemblyai(path)
+                            if text: st.success(f"✅ Transcribed: {len(text)} chars"); display_results(text, "media")
+                    os.unlink(path)
     
     with tab2:
-        st.markdown("### 🔗 URL/YouTube")
-        url = st.text_input("Enter URL", placeholder="https://example.com/article or YouTube link")
-        
-        if url and st.button("🌐 Fetch & Summarize", key="fetch_url"):
+        url = st.text_input("Enter URL", placeholder="https://...")
+        if url and st.button("🌐 Fetch", key="fetch_url"):
             if 'youtube.com' in url or 'youtu.be' in url:
-                with st.spinner("Fetching YouTube content..."):
-                    text, title, source = extract_youtube_content(url)
-                    
+                with st.spinner("Fetching YouTube..."):
+                    text, title, content_type = extract_youtube_content(url)
                     if text:
                         st.success(f"✅ {title}")
-                        st.info(f"📌 Source: {source}")
-                        
-                        # Create a temporary result
-                        result = {
-                            'name': title[:50],
-                            'text': text,
-                            'summary': generate_summary(text, 5),
-                            'keywords': extract_keywords(text),
-                            'status': 'success'
-                        }
-                        
-                        # Display
-                        st.markdown("### 📝 Summary")
-                        st.info(result['summary'])
-                        
-                        st.markdown("### 🌍 Current Affairs Format")
-                        current_affairs = format_as_current_affairs(text, "YouTube")
-                        st.markdown(current_affairs, unsafe_allow_html=True)
-                        
-                        # Statistics
-                        words = len(text.split())
-                        sentences = len(nltk.sent_tokenize(text))
-                        summary_words = len(result['summary'].split())
-                        
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("📊 Words", words)
-                        with col2:
-                            st.metric("🔤 Sentences", sentences)
-                        with col3:
-                            st.metric("📝 Summary Words", summary_words)
-                        with col4:
-                            reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
-                            st.metric("📉 Reduced", f"{reduction}%")
-                        
-                        # Keywords
-                        st.markdown("### 🏷️ Keywords")
-                        html = "<div>"
-                        for word, count in result['keywords'][:12]:
-                            size = min(24 + count, 40)
-                            html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
-                        html += "</div>"
-                        st.markdown(html, unsafe_allow_html=True)
-                        
-                        # Downloads
-                        audio = text_to_speech(result['summary'])
-                        if audio:
-                            st.audio(audio)
-                            st.download_button("🔊 Download Audio", audio, "summary.mp3")
-                    else:
-                        st.warning(f"⚠️ {source}")
-                        st.info("💡 Try downloading the video and uploading it directly in the File Upload tab.")
+                        if content_type == "description": st.info("ℹ️ Showing video description (no captions available)")
+                        display_results(text, "youtube")
+                    else: st.warning("No content found")
             elif validators.url(url):
                 with st.spinner("Fetching article..."):
                     text, title = extract_from_url(url)
-                    if text:
-                        st.success(f"✅ {title}")
-                        
-                        result = {
-                            'name': title[:50],
-                            'text': text,
-                            'summary': generate_summary(text, 5),
-                            'keywords': extract_keywords(text),
-                            'status': 'success'
-                        }
-                        
-                        st.markdown("### 📝 Summary")
-                        st.info(result['summary'])
-                        
-                        st.markdown("### 🌍 Current Affairs Format")
-                        current_affairs = format_as_current_affairs(text, "Web Article")
-                        st.markdown(current_affairs, unsafe_allow_html=True)
-                        
-                        words = len(text.split())
-                        sentences = len(nltk.sent_tokenize(text))
-                        summary_words = len(result['summary'].split())
-                        
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("📊 Words", words)
-                        with col2:
-                            st.metric("🔤 Sentences", sentences)
-                        with col3:
-                            st.metric("📝 Summary Words", summary_words)
-                        with col4:
-                            reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
-                            st.metric("📉 Reduced", f"{reduction}%")
-                        
-                        st.markdown("### 🏷️ Keywords")
-                        html = "<div>"
-                        for word, count in result['keywords'][:12]:
-                            size = min(24 + count, 40)
-                            html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
-                        html += "</div>"
-                        st.markdown(html, unsafe_allow_html=True)
-                        
-                        audio = text_to_speech(result['summary'])
-                        if audio:
-                            st.audio(audio)
-                            st.download_button("🔊 Download Audio", audio, "summary.mp3")
-                    else:
-                        st.warning("No content found")
-            else:
-                st.error("Invalid URL")
+                    if text: st.success(f"✅ {title}"); display_results(text, "web")
+                    else: st.warning("No content found")
+            else: st.error("Invalid URL")
     
     with tab3:
-        st.markdown("### 📝 Paste Text")
-        text_input = st.text_area("Paste your text here", height=200)
-        
+        text_input = st.text_area("Paste text", height=200)
         if text_input and st.button("📝 Summarize", key="summ_text"):
-            if len(text_input) > 200:
-                st.markdown("### 📝 Summary")
-                summary = generate_summary(text_input, 5)
-                st.info(summary)
-                
-                st.markdown("### 🌍 Current Affairs Format")
-                current_affairs = format_as_current_affairs(text_input, "Pasted Text")
-                st.markdown(current_affairs, unsafe_allow_html=True)
-                
-                keywords = extract_keywords(text_input)
-                st.markdown("### 🏷️ Keywords")
-                html = "<div>"
-                for word, count in keywords[:12]:
-                    size = min(24 + count, 40)
-                    html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
-                html += "</div>"
-                st.markdown(html, unsafe_allow_html=True)
-                
-                words = len(text_input.split())
-                sentences = len(nltk.sent_tokenize(text_input))
-                summary_words = len(summary.split())
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("📊 Words", words)
-                with col2:
-                    st.metric("🔤 Sentences", sentences)
-                with col3:
-                    st.metric("📝 Summary Words", summary_words)
-                with col4:
-                    reduction = int((1 - summary_words/words) * 100) if words > 0 else 0
-                    st.metric("📉 Reduced", f"{reduction}%")
-                
-                audio = text_to_speech(summary)
-                if audio:
-                    st.audio(audio)
-                    st.download_button("🔊 Download Audio", audio, "summary.mp3")
-            else:
-                st.warning("Text too short (min 200 chars)")
+            if len(text_input) > 100: display_results(text_input, "pasted")
+            else: st.warning("Text too short")
     
     with tab4:
+        display_chatbot()
+    
+    with tab5:
         st.markdown("""
         <div class='section-card'>
             <h3>📌 How to Use</h3>
             <ol>
-                <li><strong>File Upload:</strong> Upload multiple files (PDF, TXT, MP4, MP3)</li>
-                <li><strong>URL/YouTube:</strong> Paste any article or video link</li>
-                <li><strong>Paste Text:</strong> Direct text analysis</li>
+                <li><strong>Get API Keys:</strong>
+                    <ul>
+                        <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
+                        <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
+                    </ul>
+                </li>
+                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
+                <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
+                <li><strong>Ask AI:</strong> Use AI Chat tab for questions</li>
+                <li><strong>Download:</strong> Get text, summary, or audio</li>
             </ol>
-            
             <h3>✨ Features</h3>
             <ul>
-                <li>📁 <strong>Multiple File Upload</strong> - Process many files at once</li>
-                <li>📝 <strong>Summary</strong> - Extract key points</li>
-                <li>🌍 <strong>Current Affairs Format</strong> - View as news headlines</li>
-                <li>🏷️ <strong>Keywords</strong> - Important terms highlighted</li>
-                <li>🔊 <strong>Audio Download</strong> - Listen to summaries</li>
+                <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
+                <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
+                <li>🌍 <strong>Current Affairs</strong> - View as news headlines</li>
+                <li>🤖 <strong>AI Chatbot (Gemini)</strong> - Ask anything!</li>
                 <li>📥 <strong>Download</strong> - Text, summary, audio</li>
-            </ul>
-            
-            <h3>📊 Supported Formats</h3>
-            <ul>
-                <li>🎥 Video: MP4, AVI, MOV</li>
-                <li>🎵 Audio: MP3, WAV, M4A</li>
-                <li>📄 Document: PDF, TXT</li>
-                <li>🌐 Online: URLs, YouTube</li>
-            </ul>
-            
-            <h3>⚠️ YouTube Notes</h3>
-            <ul>
-                <li>Works best with videos that have captions</li>
-                <li>If no captions, shows video description</li>
-                <li>For best results, download video and upload directly</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
