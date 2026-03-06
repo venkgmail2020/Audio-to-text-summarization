@@ -51,40 +51,40 @@ except:
 
 st.set_page_config(page_title="Audio to Text Summarizer Using NLP", page_icon="🎤", layout="wide")
 
-# ===== CUSTOM CSS WITH FIXED CHATBOT BACKGROUND =====
+# ===== CUSTOM CSS WITH PROPER CONTRAST =====
 st.markdown("""
 <style>
-    /* Main background - DARK GRADIENT */
+    /* Main background - LIGHT THEME (white background, black text) */
     .stApp {
-        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e) !important;
+        background: white !important;
     }
     
-    /* All text white */
+    /* All text black for readability */
     .stApp, .stMarkdown, p, h1, h2, h3, h4, h5, h6, label, 
     .stTextInput label, .stSelectbox label, .stTextInput input, 
     .stTextArea textarea, .stMetric label, .stMetric value {
-        color: white !important;
+        color: black !important;
     }
     
-    /* Input fields */
+    /* Input fields - white background, black text */
     .stTextInput > div > div > input {
-        background: rgba(255,255,255,0.1) !important;
-        color: white !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
+        background: white !important;
+        color: black !important;
+        border: 1px solid #ccc !important;
         border-radius: 8px !important;
     }
     .stTextInput > div > div > input::placeholder {
-        color: rgba(255,255,255,0.5) !important;
+        color: #666 !important;
     }
     
     /* Text area */
     .stTextArea textarea {
-        background: rgba(255,255,255,0.1) !important;
-        color: white !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
+        background: white !important;
+        color: black !important;
+        border: 1px solid #ccc !important;
     }
     
-    /* Main header */
+    /* Main header - keep gradient but ensure text readable */
     .main-header {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
         padding: 2rem !important;
@@ -94,19 +94,22 @@ st.markdown("""
         margin-bottom: 2rem !important;
         box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
     }
+    .main-header h1, .main-header p {
+        color: white !important;
+    }
     
-    /* Section cards */
+    /* Section cards - light background with black text */
     .section-card {
-        background: rgba(255,255,255,0.1) !important;
-        backdrop-filter: blur(10px) !important;
+        background: #f8f9fa !important;
         padding: 1.5rem !important;
         border-radius: 10px !important;
         border-left: 5px solid #ff6b6b !important;
         margin: 1rem 0 !important;
-        color: white !important;
+        color: black !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
     }
     
-    /* Keyword tags */
+    /* Keyword tags - keep colored but ensure text readable */
     .keyword-tag {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
         color: white !important;
@@ -114,6 +117,16 @@ st.markdown("""
         border-radius: 20px !important;
         display: inline-block !important;
         margin: 0.2rem !important;
+    }
+    
+    /* Metric boxes */
+    .metric-box {
+        background: #f8f9fa !important;
+        padding: 1rem !important;
+        border-radius: 8px !important;
+        border: 1px solid #ddd !important;
+        color: black !important;
+        text-align: center !important;
     }
     
     /* Buttons */
@@ -134,37 +147,38 @@ st.markdown("""
     
     /* Slider */
     .slider-container {
-        background: rgba(255,255,255,0.1) !important;
+        background: #f0f2f6 !important;
         padding: 1rem !important;
         border-radius: 10px !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
+        border: 1px solid #ddd !important;
     }
     
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        background: rgba(255,255,255,0.1) !important;
+        background: #f0f2f6 !important;
         padding: 0.5rem !important;
         border-radius: 10px !important;
         gap: 0.5rem !important;
     }
     .stTabs [data-baseweb="tab"] {
-        color: white !important;
+        color: black !important;
         border-radius: 8px !important;
         padding: 0.5rem 1rem !important;
     }
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #ff6b6b, #556270) !important;
+        color: white !important;
     }
     
-    /* Chat container - FIXED BACKGROUND */
+    /* Chat container - light background */
     .chat-container {
-        background: rgba(20, 20, 30, 0.95) !important;
+        background: #f8f9fa !important;
         border-radius: 15px !important;
         padding: 20px !important;
         min-height: 400px !important;
         max-height: 500px !important;
         margin-bottom: 20px !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
+        border: 1px solid #ddd !important;
         overflow-y: auto !important;
     }
     
@@ -182,8 +196,8 @@ st.markdown("""
         word-wrap: break-word !important;
     }
     .bot-message {
-        background: rgba(50, 50, 70, 0.9) !important;
-        color: white !important;
+        background: #e9ecef !important;
+        color: black !important;
         padding: 12px 18px !important;
         border-radius: 20px 20px 20px 5px !important;
         margin: 10px auto 10px 0 !important;
@@ -192,14 +206,14 @@ st.markdown("""
         clear: both !important;
         float: left !important;
         word-wrap: break-word !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
+        border: 1px solid #dee2e6 !important;
     }
     
     /* Welcome message */
     .welcome-message {
         text-align: center !important;
         padding: 80px 20px !important;
-        color: white !important;
+        color: #666 !important;
     }
     .welcome-message h2 {
         color: #ff6b6b !important;
@@ -207,21 +221,22 @@ st.markdown("""
         margin-bottom: 20px !important;
     }
     .welcome-message p {
-        color: #ccc !important;
+        color: #666 !important;
         font-size: 1.2em !important;
     }
     
     /* Current Affairs Box */
     .current-affairs {
-        background: rgba(0,0,0,0.3) !important;
+        background: #f8f9fa !important;
         border-left: 5px solid #ff6b6b !important;
         padding: 1.5rem !important;
         border-radius: 10px !important;
         margin: 1rem 0 !important;
+        color: black !important;
     }
     .current-affairs h3 {
         color: #ff6b6b !important;
-        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+        border-bottom: 1px solid #dee2e6 !important;
         padding-bottom: 10px !important;
     }
     .current-affairs ul {
@@ -232,20 +247,15 @@ st.markdown("""
         margin: 10px 0 !important;
         padding-left: 20px !important;
         border-left: 3px solid #ff6b6b !important;
+        color: black !important;
     }
     
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+    /* Sidebar */
+    .css-1d391kg, .css-163ttbj, [data-testid="stSidebar"] {
+        background-color: #f8f9fa !important;
     }
-    ::-webkit-scrollbar-track {
-        background: rgba(255,255,255,0.1);
-        border-radius: 10px;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: linear-gradient(135deg, #ff6b6b, #556270);
-        border-radius: 10px;
+    [data-testid="stSidebar"] * {
+        color: black !important;
     }
     
     /* Clear floats */
@@ -564,8 +574,8 @@ def format_as_current_affairs(text, source_name):
     current_affairs = f"""
 <div class='current-affairs'>
     <h3>🌍 TODAY'S CURRENT AFFAIRS</h3>
-    <p style='color: #aaa;'>📅 {datetime.now().strftime("%B %d, %Y")} | 📰 Source: {source_name}</p>
-    <hr style='border-color: rgba(255,255,255,0.2);'>
+    <p style='color: #666;'>📅 {datetime.now().strftime("%B %d, %Y")} | 📰 Source: {source_name}</p>
+    <hr style='border-color: #dee2e6;'>
 """
     
     # Main headlines (first 3 important sentences)
@@ -600,90 +610,51 @@ def format_as_current_affairs(text, source_name):
 """
     return current_affairs
 
-# ===== GEMINI AI RESPONSE (FIXED MODEL) =====
-def get_gemini_response(user_input, context=""):
-    """Get response from Gemini AI with correct model name"""
-    if not GEMINI_AVAILABLE:
-        return get_simple_response(user_input, context)
+# ===== SIMPLE CHATBOT RESPONSE (Working properly) =====
+def get_bot_response(user_input, context=""):
+    """Simple but working chatbot response"""
+    user_input = user_input.lower().strip()
     
-    try:
-        # Configure API key
-        api_key = None
-        if st.session_state.gemini_key:
-            api_key = st.session_state.gemini_key
-        elif 'GEMINI_API_KEY' in st.secrets:
-            api_key = st.secrets['GEMINI_API_KEY']
-        
-        if not api_key:
-            return get_simple_response(user_input, context)
-        
-        genai.configure(api_key=api_key)
-        
-        # Current working model names (March 2026)
-        model_names = [
-            'models/gemini-2.0-flash',           # Most stable
-            'models/gemini-2.5-flash-latest',     # Latest flash
-        ]
-        
-        for model_name in model_names:
-            try:
-                model = genai.GenerativeModel(model_name)
-                
-                prompt = f"""You are an AI assistant for a Text Summarizer app called "Audio to Text Summarizer Using NLP".
-The app can summarize audio, video, PDF, URLs, and text.
-
-Current context: {'Summary available: ' + context[:300] if context else 'No summary yet'}
-
-User question: {user_input}
-
-Provide a helpful, friendly, and concise answer. Use emojis occasionally."""
-                
-                response = model.generate_content(prompt)
-                return response.text
-            except:
-                continue
-        
-        return get_simple_response(user_input, context)
-        
-    except Exception as e:
-        return get_simple_response(user_input, context)
-
-# ===== SIMPLE CHATBOT RESPONSE (Fallback) =====
-def get_simple_response(user_input, context=""):
-    """Simple rule-based response when Gemini is not available"""
-    user_input = user_input.lower()
+    # Greetings
+    if any(word in user_input for word in ['hi', 'hello', 'hey', 'namaste', 'hy']):
+        return "Hello! How can I help you with your summary today?"
     
-    greetings = ['hi', 'hello', 'hey', 'namaste', 'hy', 'hii']
-    if any(g in user_input for g in greetings):
-        return "👋 Hello! How can I help you with your summary today?"
+    # Questions about user
+    if 'your name' in user_input or 'who are you' in user_input:
+        return "I'm your AI assistant for this Text Summarizer app!"
     
+    # Questions about summary
     if 'summary' in user_input:
         if context:
-            return f"📝 Here's your summary: {context[:150]}... You can adjust the length using the slider."
-        return "📝 No summary yet. Upload a file or paste text first!"
+            return f"Your current summary: {context[:150]}... You can adjust the length using the slider."
+        return "No summary yet. Upload a file or paste text first!"
     
+    # Questions about keywords
     if 'keyword' in user_input:
-        return "🔑 Keywords are important words in your text. They appear as colored tags below."
+        return "Keywords are important words in your text. They appear as colored tags below the summary."
     
-    if 'word cloud' in user_input:
-        return "☁️ Word cloud shows important words - bigger words appear more frequently."
+    # Questions about features
+    if 'feature' in user_input or 'what can you do':
+        return "I can help with summarization, keywords, word cloud, QR codes, translation, and more!"
     
-    if 'qr' in user_input:
-        return "📱 QR code lets you share your summary on mobile phones."
+    # Questions about help
+    if 'help' in user_input:
+        return "Check the Help tab for detailed instructions on how to use all features."
     
-    if 'translate' in user_input:
-        return "🌐 You can translate summary to Telugu, Hindi, and Tamil."
+    # Questions about audio
+    if 'audio' in user_input or 'listen' in user_input:
+        return "You can listen to your summary by clicking the Audio download button."
     
-    if 'audio' in user_input:
-        return "🔊 Click the Audio button to listen to your summary."
+    # Questions about translation
+    if 'translate' in user_input or 'telugu' in user_input:
+        return "You can translate your summary to Telugu, Hindi, and Tamil using the Translate button."
     
-    if 'download' in user_input:
-        return "📥 You can download Full Text, Summary, or Audio files."
-    
+    # Questions about current affairs
     if 'current affairs' in user_input or 'news' in user_input:
-        return "📰 Your uploaded content is shown in Current Affairs format in the second tab!"
+        return "Your uploaded content is shown in Current Affairs format in the second tab!"
     
-    return "🤔 I didn't understand. Ask about: summary, keywords, word cloud, QR code, translation, audio, or download."
+    # Default response
+    return "I'm not sure I understand. Try asking about summary, keywords, features, or help."
 
 # ===== DISPLAY RESULTS WITH CURRENT AFFAIRS TAB =====
 def display_results(text, source_name):
@@ -885,7 +856,7 @@ def display_results(text, source_name):
             file_name=f"current_affairs_{datetime.now().strftime('%Y%m%d')}.txt"
         )
 
-# ===== AI CHATBOT SECTION =====
+# ===== AI CHATBOT SECTION - FIXED =====
 def display_chatbot():
     st.markdown("### 🤖 AI Assistant")
     
@@ -904,12 +875,13 @@ def display_chatbot():
     # Chat container
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     
+    # Display chat history
     if not st.session_state.chat_history:
         st.markdown("""
         <div class='welcome-message'>
             <h2>👋 Hello!</h2>
             <p>Ask me anything about your summary or app features</p>
-            <p style='color: #888; margin-top: 20px;'>Type your message below and click Send</p>
+            <p style='color: #666; margin-top: 20px;'>Type your message below and click Send</p>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -925,145 +897,4 @@ def display_chatbot():
     # Chat input
     col1, col2 = st.columns([5, 1])
     with col1:
-        user_input = st.text_input("", placeholder="Type your message here...", key="chat_input", label_visibility="collapsed")
-    with col2:
-        send = st.button("📤 Send", key="send_btn", use_container_width=True)
-    
-    if send and user_input:
-        # Add user message
-        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
-        
-        # Get response
-        context = st.session_state.get('current_summary', '')
-        
-        if has_gemini:
-            with st.spinner("🤔 Thinking..."):
-                response = get_gemini_response(user_input, context)
-        else:
-            response = get_simple_response(user_input, context)
-        
-        # Add bot response
-        st.session_state.chat_history.append({'role': 'bot', 'content': response})
-        st.rerun()
-    
-    # Clear button
-    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="clear_chat"):
-        st.session_state.chat_history = []
-        st.rerun()
-
-# ===== MAIN UI =====
-def main():
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "🤖 AI Chat", "ℹ️ Help"])
-    
-    with tab1:
-        uploaded_file = st.file_uploader(
-            "Choose file",
-            type=['mp4', 'avi', 'mov', 'mp3', 'wav', 'm4a', 'pdf', 'txt']
-        )
-        
-        if uploaded_file:
-            file_ext = uploaded_file.name.split('.')[-1].lower()
-            file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
-            st.info(f"📊 {uploaded_file.name} | {file_size:.2f} MB")
-            
-            if file_ext in ['mp4', 'avi', 'mov']:
-                st.video(uploaded_file)
-            elif file_ext in ['mp3', 'wav', 'm4a']:
-                st.audio(uploaded_file)
-            
-            if st.button("🚀 Process", key="proc_file"):
-                with st.spinner("Processing..."):
-                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                        tmp.write(uploaded_file.getvalue())
-                        path = tmp.name
-                    
-                    if file_ext == 'pdf':
-                        text = extract_pdf_text(path)
-                        if text:
-                            st.success("✅ Extracted PDF")
-                            display_results(text, "pdf")
-                    elif file_ext == 'txt':
-                        with open(path, 'r', encoding='utf-8') as f:
-                            text = f.read()
-                        display_results(text, "text")
-                    else:
-                        if not st.session_state.assemblyai_key:
-                            st.error("❌ AssemblyAI Key required")
-                        else:
-                            text = transcribe_with_assemblyai(path)
-                            if text:
-                                st.success(f"✅ Transcribed: {len(text)} chars")
-                                display_results(text, "media")
-                    
-                    os.unlink(path)
-    
-    with tab2:
-        url = st.text_input("Enter URL", placeholder="https://...")
-        
-        if url and st.button("🌐 Fetch", key="fetch_url"):
-            if 'youtube.com' in url or 'youtu.be' in url:
-                with st.spinner("Fetching YouTube..."):
-                    text, title, content_type = extract_youtube_content(url)
-                    if text:
-                        st.success(f"✅ {title}")
-                        if content_type == "description":
-                            st.info("ℹ️ Showing video description (no captions available)")
-                        display_results(text, "youtube")
-                    else:
-                        st.warning("No content found")
-            elif validators.url(url):
-                with st.spinner("Fetching article..."):
-                    text, title = extract_from_url(url)
-                    if text:
-                        st.success(f"✅ {title}")
-                        display_results(text, "web")
-                    else:
-                        st.warning("No content found")
-            else:
-                st.error("Invalid URL")
-    
-    with tab3:
-        text_input = st.text_area("Paste text", height=200)
-        if text_input and st.button("📝 Summarize", key="summ_text"):
-            if len(text_input) > 100:
-                display_results(text_input, "pasted")
-            else:
-                st.warning("Text too short")
-    
-    with tab4:
-        display_chatbot()
-    
-    with tab5:
-        st.markdown("""
-        <div class='section-card'>
-            <h3>📌 How to Use</h3>
-            <ol>
-                <li><strong>Get API Keys:</strong>
-                    <ul>
-                        <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
-                        <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
-                    </ul>
-                </li>
-                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
-                <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
-                <li><strong>Two Views:</strong> Normal Summary & Current Affairs Format</li>
-                <li><strong>Ask AI:</strong> Use AI Chat tab for questions</li>
-                <li><strong>Download:</strong> Get text, summary, or audio</li>
-            </ol>
-            
-            <h3>✨ Features</h3>
-            <ul>
-                <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
-                <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
-                <li>🌍 <strong>Current Affairs Format</strong> - News-style presentation</li>
-                <li>☁️ <strong>Word Cloud</strong> - Visual keywords</li>
-                <li>📱 <strong>QR Code</strong> - Share on mobile</li>
-                <li>🌐 <strong>Translation</strong> - Telugu, Hindi, Tamil</li>
-                <li>🤖 <strong>AI Chatbot</strong> - Ask questions about content</li>
-                <li>📥 <strong>Download</strong> - Text, summary, audio</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+        user_input = st.text_input("", placeholder="Type your message here...",
