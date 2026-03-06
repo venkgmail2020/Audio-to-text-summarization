@@ -20,6 +20,7 @@ import validators
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
 from datetime import datetime
+import random
 
 # ===== GEMINI AI IMPORTS =====
 try:
@@ -27,7 +28,6 @@ try:
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
-    st.warning("⚠️ google-generativeai not installed. Run: pip install google-generativeai")
 
 # ===== NLTK DOWNLOAD =====
 try:
@@ -71,28 +71,13 @@ st.markdown("""
         border: none !important; padding: 0.5rem 1.5rem !important; border-radius: 25px !important;
         font-weight: bold !important; width: 100% !important;
     }
-    .chat-container {
-        background: #f8f9fa !important; border-radius: 15px !important; padding: 20px !important;
-        min-height: 400px !important; max-height: 500px !important; margin-bottom: 20px !important;
-        border: 1px solid #ddd !important; overflow-y: auto !important;
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 5px 15px rgba(255,107,107,0.4) !important;
     }
-    .user-message {
-        background: linear-gradient(135deg, #ff6b6b, #556270) !important; color: white !important;
-        padding: 12px 18px !important; border-radius: 20px 20px 5px 20px !important;
-        margin: 10px 0 10px auto !important; max-width: 80% !important; width: fit-content !important;
-        float: right !important; clear: both !important;
-    }
-    .bot-message {
-        background: #e9ecef !important; color: black !important; padding: 12px 18px !important;
-        border-radius: 20px 20px 20px 5px !important; margin: 10px auto 10px 0 !important;
-        max-width: 80% !important; width: fit-content !important; float: left !important;
-        clear: both !important; border: 1px solid #dee2e6 !important;
-    }
-    .welcome-message { text-align: center !important; padding: 80px 20px !important; color: #666 !important; }
-    .welcome-message h2 { color: #ff6b6b !important; font-size: 2.5em !important; }
     [data-testid="stSidebar"] { background-color: #f8f9fa !important; }
     [data-testid="stSidebar"] * { color: black !important; }
-    .clearfix::after { content: ""; clear: both; display: table; }
+    .stChatMessage { margin: 10px 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -115,8 +100,8 @@ if 'current_summary' not in st.session_state:
     st.session_state.current_summary = ''
 if 'slider_value' not in st.session_state:
     st.session_state.slider_value = 5
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
 
 # ===== SIDEBAR =====
 with st.sidebar:
@@ -130,16 +115,16 @@ with st.sidebar:
     )
     
     gemini_key = st.text_input(
-        "🤖 Google Gemini Key (Required for AI Chat)",
+        "🤖 Google Gemini Key",
         value=st.session_state.gemini_key,
         type="password",
-        placeholder="Paste your new Gemini API key here"
+        placeholder="Paste your Gemini API key here"
     )
     
     if st.button("💾 Save Keys", use_container_width=True):
         st.session_state.assemblyai_key = assembly_key
         st.session_state.gemini_key = gemini_key
-        st.success("✅ Keys saved! Now use AI Chat tab.")
+        st.success("✅ Keys saved!")
     
     st.markdown("---")
     st.markdown("### 📌 Supported Formats")
@@ -293,9 +278,9 @@ def generate_summary(text, num_points):
 
 # ===== GEMINI AI RESPONSE (REAL AI) =====
 def get_gemini_response(user_input, context=""):
-    """Real AI response using Google Gemini"""
+    """Get response from Google Gemini AI"""
     try:
-        # Get API key from session state
+        # Get API key
         api_key = st.session_state.get('gemini_key', '')
         
         if not api_key:
@@ -304,99 +289,44 @@ def get_gemini_response(user_input, context=""):
         # Configure Gemini
         genai.configure(api_key=api_key)
         
-        # Use the CORRECT model name
+        # ✅ CORRECT MODEL NAME (March 2026)
         model = genai.GenerativeModel('models/gemini-2.0-flash')
         
-        # Create prompt
-        prompt = f"""You are a helpful AI assistant for a Text Summarizer app called "Audio to Text Summarizer Using NLP".
+        # ✅ Add random delay to avoid rate limits
+        time.sleep(random.uniform(1, 2))
         
-Current context from user's uploaded content: {context[:1000] if context else 'No content uploaded yet'}
+        # Create prompt
+        prompt = f"""You are a helpful AI assistant for a Text Summarizer app.
+        
+Current context: {context[:500] if context else 'No content uploaded yet'}
 
 The app can:
-- Transcribe audio/video files using AssemblyAI
+- Transcribe audio/video files
 - Extract text from PDFs and URLs
-- Generate summaries using LexRank algorithm
-- Show keywords from the text
+- Generate summaries
+- Show keywords
 - Convert text to speech
 
 User question: {user_input}
 
-Provide a helpful, friendly, and accurate answer. Be conversational and use emojis occasionally.
+Provide a helpful, friendly answer. Be conversational and use emojis occasionally.
 """
         
         response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        return f"❌ Error: {str(e)}. Please check your Gemini API key."
-
-# ===== DISPLAY CHATBOT WITH REAL AI =====
-def display_chatbot():
-    st.markdown("### 🤖 AI Assistant (Powered by Google Gemini)")
-    
-    # Check if API key exists
-    if not st.session_state.gemini_key:
-        st.warning("⚠️ Please add your Google Gemini API key in the sidebar to use the AI chatbot.")
+        error = str(e)
         
-        # Show input for API key directly
-        temp_key = st.text_input("Enter Gemini API Key:", type="password", key="temp_gemini")
-        if st.button("Save and Continue", key="save_temp"):
-            st.session_state.gemini_key = temp_key
-            st.rerun()
-        return
-    
-    st.success("✅ Gemini AI is connected! Ask me anything.")
-    
-    # Chat container
-    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
-    
-    # Display chat history
-    if not st.session_state.chat_history:
-        st.markdown("""
-        <div class='welcome-message'>
-            <h2>👋 Hello! I'm your AI Assistant</h2>
-            <p>Ask me anything about your summaries, the app, or any general questions!</p>
-            <p style='color: #666; margin-top: 20px;'>Examples:</p>
-            <p style='color: #666;'>• "Summarize this text for me"</p>
-            <p style='color: #666;'>• "What are keywords?"</p>
-            <p style='color: #666;'>• "How does LexRank work?"</p>
-            <p style='color: #666;'>• "What is the capital of France?"</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        for msg in st.session_state.chat_history:
-            if msg['role'] == 'user':
-                st.markdown(f"<div class='user-message'>👤 {msg['content']}</div>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<div class='bot-message'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("<div class='clearfix'></div>", unsafe_allow_html=True)
-    
-    # Chat input
-    col1, col2 = st.columns([5, 1])
-    with col1:
-        user_input = st.text_input("", placeholder="Ask me anything...", key="gemini_input")
-    with col2:
-        send = st.button("📤 Send", key="gemini_send", use_container_width=True)
-    
-    if send and user_input:
-        # Add user message
-        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
-        
-        # Get AI response
-        context = st.session_state.get('current_summary', '')
-        with st.spinner("🤔 Thinking..."):
-            response = get_gemini_response(user_input, context)
-        
-        # Add bot response
-        st.session_state.chat_history.append({'role': 'bot', 'content': response})
-        st.rerun()
-    
-    # Clear button
-    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="gemini_clear"):
-        st.session_state.chat_history = []
-        st.rerun()
+        # ✅ User-friendly error messages
+        if "API key" in error:
+            return "❌ Invalid API key. Please check your Gemini API key in the sidebar."
+        elif "quota" in error or "429" in error:
+            return "⚠️ API quota exceeded. Please wait 60 seconds and try again."
+        elif "model" in error:
+            return "❌ Model not found. Please check Gemini documentation."
+        else:
+            return f"❌ Error: {error}"
 
 # ===== DISPLAY RESULTS =====
 def display_results(text, source_name):
@@ -500,6 +430,37 @@ def display_results(text, source_name):
             html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
+
+# ===== AI CHATBOT =====
+def display_chatbot():
+    st.markdown("### 🤖 AI Assistant")
+    
+    # Check for API key
+    if not st.session_state.get('gemini_key'):
+        st.warning("⚠️ Please add your Google Gemini API key in the sidebar first!")
+        return
+    
+    st.success("✅ Gemini AI is connected! Ask me anything.")
+    
+    # Display chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask me anything about your summary or the app..."):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Get AI response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                context = st.session_state.get('current_summary', '')
+                response = get_gemini_response(prompt, context)
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
 
 # ===== MAIN UI =====
 def main():
