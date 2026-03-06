@@ -305,7 +305,7 @@ def get_gemini_response(user_input, context=""):
         genai.configure(api_key=api_key)
         
         # Use the CORRECT model name
-        model = genai.GenerativeModel('models/gemini-2.0-flash')  # ← FIXED!
+        model = genai.GenerativeModel('models/gemini-2.0-flash')
         
         # Create prompt
         prompt = f"""You are a helpful AI assistant for a Text Summarizer app called "Audio to Text Summarizer Using NLP".
@@ -329,6 +329,74 @@ Provide a helpful, friendly, and accurate answer. Be conversational and use emoj
         
     except Exception as e:
         return f"❌ Error: {str(e)}. Please check your Gemini API key."
+
+# ===== DISPLAY CHATBOT WITH REAL AI =====
+def display_chatbot():
+    st.markdown("### 🤖 AI Assistant (Powered by Google Gemini)")
+    
+    # Check if API key exists
+    if not st.session_state.gemini_key:
+        st.warning("⚠️ Please add your Google Gemini API key in the sidebar to use the AI chatbot.")
+        
+        # Show input for API key directly
+        temp_key = st.text_input("Enter Gemini API Key:", type="password", key="temp_gemini")
+        if st.button("Save and Continue", key="save_temp"):
+            st.session_state.gemini_key = temp_key
+            st.rerun()
+        return
+    
+    st.success("✅ Gemini AI is connected! Ask me anything.")
+    
+    # Chat container
+    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+    
+    # Display chat history
+    if not st.session_state.chat_history:
+        st.markdown("""
+        <div class='welcome-message'>
+            <h2>👋 Hello! I'm your AI Assistant</h2>
+            <p>Ask me anything about your summaries, the app, or any general questions!</p>
+            <p style='color: #666; margin-top: 20px;'>Examples:</p>
+            <p style='color: #666;'>• "Summarize this text for me"</p>
+            <p style='color: #666;'>• "What are keywords?"</p>
+            <p style='color: #666;'>• "How does LexRank work?"</p>
+            <p style='color: #666;'>• "What is the capital of France?"</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        for msg in st.session_state.chat_history:
+            if msg['role'] == 'user':
+                st.markdown(f"<div class='user-message'>👤 {msg['content']}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='bot-message'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='clearfix'></div>", unsafe_allow_html=True)
+    
+    # Chat input
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        user_input = st.text_input("", placeholder="Ask me anything...", key="gemini_input")
+    with col2:
+        send = st.button("📤 Send", key="gemini_send", use_container_width=True)
+    
+    if send and user_input:
+        # Add user message
+        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
+        
+        # Get AI response
+        context = st.session_state.get('current_summary', '')
+        with st.spinner("🤔 Thinking..."):
+            response = get_gemini_response(user_input, context)
+        
+        # Add bot response
+        st.session_state.chat_history.append({'role': 'bot', 'content': response})
+        st.rerun()
+    
+    # Clear button
+    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="gemini_clear"):
+        st.session_state.chat_history = []
+        st.rerun()
 
 # ===== DISPLAY RESULTS =====
 def display_results(text, source_name):
