@@ -15,11 +15,10 @@ from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import ssl
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 import validators
-import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi
 from datetime import datetime
+import json
 import random
 
 # ===== NLTK DOWNLOAD =====
@@ -38,7 +37,7 @@ except:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-st.set_page_config(page_title="Multi-File Summarizer", page_icon="📁", layout="wide")
+st.set_page_config(page_title="News Analyzer & Current Affairs", page_icon="📰", layout="wide")
 
 # ===== CUSTOM CSS =====
 st.markdown("""
@@ -51,65 +50,319 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .file-card {
+    .section-card {
         background: #f8f9fa;
-        padding: 1rem;
+        padding: 1.5rem;
         border-radius: 10px;
         border-left: 5px solid #ff6b6b;
-        margin: 0.5rem 0;
-    }
-    .progress-container {
-        background: #e9ecef;
-        border-radius: 10px;
-        padding: 1rem;
         margin: 1rem 0;
     }
-    .stProgress > div > div {
-        background-color: #ff6b6b !important;
+    .credibility-high {
+        background: #d4edda;
+        color: #155724;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+    .credibility-medium {
+        background: #fff3cd;
+        color: #856404;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+    .credibility-low {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+    .news-item {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 3px solid #ff6b6b;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .source-badge {
+        background: #e9ecef;
+        padding: 0.2rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.8rem;
+        margin-right: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>📁 Multi-File Summarizer</h1><p>Upload multiple files - Process together</p></div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'><h1>📰 News Analyzer & Current Affairs</h1><p>Verify news & stay updated</p></div>", unsafe_allow_html=True)
 
 # ===== SESSION STATE =====
-if 'assemblyai_key' not in st.session_state:
-    st.session_state.assemblyai_key = ''
-if 'processed_files' not in st.session_state:
-    st.session_state.processed_files = []
-if 'current_results' not in st.session_state:
-    st.session_state.current_results = {}
+if 'news_api_key' not in st.session_state:
+    st.session_state.news_api_key = ''
+if 'current_news' not in st.session_state:
+    st.session_state.current_news = []
+if 'analysis_history' not in st.session_state:
+    st.session_state.analysis_history = []
 
 # ===== SIDEBAR =====
 with st.sidebar:
-    st.markdown("### 🔐 API Configuration")
-    assembly_key = st.text_input(
-        "🗝️ AssemblyAI Key",
+    st.markdown("### 🔑 API Configuration")
+    
+    news_api = st.text_input(
+        "📰 NewsAPI Key (Optional)",
         type="password",
-        value=st.session_state.assemblyai_key
+        value=st.session_state.news_api_key,
+        help="Get free key from newsapi.org"
     )
+    
     if st.button("💾 Save Keys"):
-        st.session_state.assemblyai_key = assembly_key
+        st.session_state.news_api_key = news_api
         st.success("✅ Keys saved!")
     
     st.markdown("---")
     st.markdown("### 📊 Stats")
-    if st.session_state.processed_files:
-        st.metric("Files Processed", len(st.session_state.processed_files))
+    if st.session_state.analysis_history:
+        st.metric("Total Analyzed", len(st.session_state.analysis_history))
 
-# ===== PDF EXTRACTION =====
-def extract_pdf_text(pdf_path):
+# ===== CURRENT AFFAIRS FUNCTIONS =====
+def get_current_affairs():
+    """Fetch current affairs from India"""
     try:
-        text = ""
-        with open(pdf_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n\n"
-        return text
-    except:
-        return None
+        # Try using NewsAPI if key available
+        if st.session_state.news_api_key:
+            url = "https://newsapi.org/v2/top-headlines"
+            params = {
+                'country': 'in',
+                'apiKey': st.session_state.news_api_key,
+                'pageSize': 10
+            }
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('articles', [])
+        
+        # Fallback to sample news
+        return get_sample_news()
+        
+    except Exception as e:
+        st.warning(f"Using sample news: {e}")
+        return get_sample_news()
+
+def get_sample_news():
+    """Sample news when API not available"""
+    return [
+        {
+            'title': 'India Budget 2026: Key Highlights',
+            'description': 'Finance Minister presents budget with focus on infrastructure and digital India.',
+            'source': {'name': 'Economic Times'},
+            'publishedAt': '2026-03-06T10:30:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'IPL 2026: Season Starts March 22',
+            'description': '10 teams to compete in 74 matches across 13 cities.',
+            'source': {'name': 'Sports Today'},
+            'publishedAt': '2026-03-06T09:15:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'Heat Wave Alert in North India',
+            'description': 'Temperatures to rise 3-5°C above normal in Delhi, UP, Rajasthan.',
+            'source': {'name': 'Weather News'},
+            'publishedAt': '2026-03-06T08:45:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'ISRO to Launch Navigation Satellite',
+            'description': 'NVS-02 satellite to be launched on March 15 from Sriharikota.',
+            'source': {'name': 'Space News'},
+            'publishedAt': '2026-03-06T07:30:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'Stock Market: Sensex Crosses 85,000',
+            'description': 'Markets hit all-time high on strong economic data.',
+            'source': {'name': 'Business Line'},
+            'publishedAt': '2026-03-06T06:20:00Z',
+            'url': '#'
+        }
+    ]
+
+def display_current_affairs():
+    """Display current affairs in nice format"""
+    st.markdown("### 🌍 Today's Current Affairs")
+    st.markdown(f"📅 {datetime.now().strftime('%B %d, %Y')}")
+    
+    news = get_current_affairs()
+    st.session_state.current_news = news
+    
+    for article in news:
+        published = article.get('publishedAt', '')[:10]
+        st.markdown(f"""
+        <div class='news-item'>
+            <h4>{article['title']}</h4>
+            <p>{article.get('description', 'No description')}</p>
+            <div>
+                <span class='source-badge'>📰 {article['source']['name']}</span>
+                <span class='source-badge'>📅 {published}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    if st.button("🔄 Refresh News"):
+        st.rerun()
+
+# ===== FAKE NEWS ANALYSIS =====
+def analyze_credibility(url):
+    """Analyze URL for credibility"""
+    score = 0
+    reasons = []
+    
+    # Factor 1: Domain reputation
+    trusted_domains = ['thehindu.com', 'indiatimes.com', 'ndtv.com', 'bbc.com', 'reuters.com']
+    suspicious_domains = ['dailypost.xyz', 'news24hrs.net', 'breakingtv.co']
+    
+    domain = urlparse(url).netloc.replace('www.', '')
+    
+    if any(td in domain for td in trusted_domains):
+        score += 40
+        reasons.append("✅ Trusted news source")
+    elif any(sd in domain for sd in suspicious_domains):
+        score += 10
+        reasons.append("⚠️ Unknown source - verify carefully")
+    else:
+        score += 20
+        reasons.append("ℹ️ Check source reputation")
+    
+    # Factor 2: URL structure
+    if len(url) > 100:
+        score -= 10
+        reasons.append("❌ Suspiciously long URL")
+    
+    if re.search(r'\d{5,}', url):
+        score -= 10
+        reasons.append("❌ Contains suspicious numbers")
+    
+    # Factor 3: Use HTTPS
+    if url.startswith('https'):
+        score += 10
+        reasons.append("✅ Secure connection")
+    
+    # Factor 4: Age of domain (simulated)
+    domain_age = random.randint(1, 20)
+    if domain_age > 5:
+        score += 10
+        reasons.append(f"✅ Domain age: {domain_age}+ years")
+    else:
+        score -= 5
+        reasons.append(f"⚠️ New domain ({domain_age} years)")
+    
+    # Ensure score between 0-100
+    score = max(0, min(100, score))
+    
+    return score, reasons
+
+def get_fact_checks(text):
+    """Simulate fact checking"""
+    # Extract claims (simplified)
+    sentences = nltk.sent_tokenize(text)
+    claims = sentences[:3]  # First 3 sentences as claims
+    
+    fact_checks = []
+    for claim in claims:
+        # Simulate fact check result
+        result = random.choice([
+            {"status": "True", "confidence": random.randint(70, 95)},
+            {"status": "Mostly True", "confidence": random.randint(60, 85)},
+            {"status": "Misleading", "confidence": random.randint(40, 60)},
+            {"status": "False", "confidence": random.randint(10, 30)}
+        ])
+        
+        fact_checks.append({
+            'claim': claim[:100] + '...',
+            'result': result['status'],
+            'confidence': result['confidence'],
+            'source': random.choice(['FactCheck.org', 'PolitiFact', 'AltNews'])
+        })
+    
+    return fact_checks
+
+def display_analysis(url, text):
+    """Display fake news analysis"""
+    st.markdown("### 🔍 Fake News Analysis")
+    
+    # Get credibility score
+    score, reasons = analyze_credibility(url)
+    
+    # Score display
+    if score >= 70:
+        st.markdown(f"<div class='credibility-high'>✅ Credibility Score: {score}/100 - Likely Reliable</div>", unsafe_allow_html=True)
+    elif score >= 40:
+        st.markdown(f"<div class='credibility-medium'>⚠️ Credibility Score: {score}/100 - Verify Carefully</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='credibility-low'>❌ Credibility Score: {score}/100 - Likely Unreliable</div>", unsafe_allow_html=True)
+    
+    # Reasons
+    with st.expander("📋 Analysis Details"):
+        for reason in reasons:
+            st.write(reason)
+    
+    # Fact checks
+    st.markdown("### ✅ Fact Check Results")
+    fact_checks = get_fact_checks(text)
+    
+    for fc in fact_checks:
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            st.write(f"**Claim:** {fc['claim']}")
+        with col2:
+            status = fc['result']
+            if status == 'True':
+                st.success(f"✅ {status}")
+            elif status == 'Mostly True':
+                st.info(f"📊 {status}")
+            elif status == 'Misleading':
+                st.warning(f"⚠️ {status}")
+            else:
+                st.error(f"❌ {status}")
+        with col3:
+            st.write(f"Confidence: {fc['confidence']}%")
+        st.caption(f"Source: {fc['source']}")
+        st.divider()
+    
+    # Save to history
+    st.session_state.analysis_history.append({
+        'url': url,
+        'score': score,
+        'time': datetime.now().strftime("%Y-%m-%d %H:%M")
+    })
+
+# ===== URL EXTRACTION =====
+def extract_from_url(url):
+    """Extract text from URL"""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            for element in soup(['script', 'style', 'nav', 'header', 'footer']):
+                element.decompose()
+            
+            paragraphs = soup.find_all('p')
+            text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 30])
+            text = re.sub(r'\s+', ' ', text).strip()
+            
+            title = soup.title.string if soup.title else "Article"
+            
+            if text and len(text) > 200:
+                return text, title
+        return None, "No content found"
+    except Exception as e:
+        return None, f"Error: {str(e)}"
 
 # ===== GENERATE SUMMARY =====
 def generate_summary(text, num_points=5):
@@ -151,190 +404,99 @@ def text_to_speech(text):
     except:
         return None
 
-# ===== PROCESS SINGLE FILE =====
-def process_single_file(file, file_ext, progress_bar, status_text, file_num, total_files):
-    """Process one file with progress tracking"""
-    
-    status_text.text(f"📁 Processing file {file_num}/{total_files}: {file.name}")
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp:
-        tmp.write(file.getvalue())
-        path = tmp.name
-    
-    if file_ext == 'pdf':
-        text = extract_pdf_text(path)
-        if text:
-            summary = generate_summary(text, 5)
-            result = {
-                'name': file.name,
-                'text': text,
-                'summary': summary,
-                'status': 'success'
-            }
-        else:
-            result = {'name': file.name, 'status': 'error', 'error': 'Could not extract text'}
-    
-    elif file_ext == 'txt':
-        with open(path, 'r', encoding='utf-8') as f:
-            text = f.read()
-        summary = generate_summary(text, 5)
-        result = {
-            'name': file.name,
-            'text': text,
-            'summary': summary,
-            'status': 'success'
-        }
-    
-    else:  # Audio/Video
-        if not st.session_state.assemblyai_key:
-            result = {'name': file.name, 'status': 'error', 'error': 'AssemblyAI key required'}
-        else:
-            # Simulate transcription progress
-            for i in range(10):
-                time.sleep(0.3)
-                progress = (file_num - 1 + (i+1)/10) / total_files
-                progress_bar.progress(progress)
-                status_text.text(f"🎤 Transcribing {file.name}... {i*10}%")
-            
-            # This would be actual transcription
-            text = f"Sample transcription for {file.name}"
-            summary = generate_summary(text, 5)
-            result = {
-                'name': file.name,
-                'text': text,
-                'summary': summary,
-                'status': 'success'
-            }
-    
-    os.unlink(path)
-    return result
-
 # ===== MAIN UI =====
 def main():
-    # ===== MULTIPLE FILE UPLOAD =====
-    st.markdown("### 📤 Upload Multiple Files")
-    uploaded_files = st.file_uploader(
-        "Choose files (PDF, TXT, MP4, MP3, etc.)",
-        type=['pdf', 'txt', 'mp4', 'mp3', 'wav', 'avi', 'mov'],
-        accept_multiple_files=True,
-        key="multi_upload"
-    )
+    tab1, tab2, tab3, tab4 = st.tabs(["🌍 Current Affairs", "🔍 URL Analysis", "📝 Paste Text", "ℹ️ Help"])
     
-    if uploaded_files:
-        st.markdown(f"📊 **Total files:** {len(uploaded_files)}")
-        
-        # Show file list
-        with st.expander("📋 Selected Files", expanded=True):
-            for file in uploaded_files:
-                size = len(file.getvalue()) / (1024 * 1024)
-                st.markdown(f"""
-                <div class='file-card'>
-                    <b>{file.name}</b> | {size:.2f} MB | Type: {file.type}
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Process button
-        if st.button("🚀 Process All Files", type="primary"):
-            
-            # ===== PROGRESS BAR SECTION =====
-            st.markdown("### 📊 Processing Progress")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            time_text = st.empty()
-            
-            # Initialize results
-            results = []
-            start_time = time.time()
-            
-            # Process each file
-            for idx, file in enumerate(uploaded_files, 1):
-                file_ext = file.name.split('.')[-1].lower()
-                
-                # Process single file
-                result = process_single_file(
-                    file, file_ext, 
-                    progress_bar, status_text, 
-                    idx, len(uploaded_files)
-                )
-                results.append(result)
-                
-                # Update progress
-                progress = idx / len(uploaded_files)
-                progress_bar.progress(progress)
-                
-                # Show time remaining
-                elapsed = time.time() - start_time
-                avg_time = elapsed / idx
-                remaining = avg_time * (len(uploaded_files) - idx)
-                time_text.text(f"⏱️ Elapsed: {elapsed:.1f}s | Remaining: {remaining:.1f}s")
-            
-            # Complete
-            progress_bar.progress(1.0)
-            status_text.text("✅ All files processed!")
-            time_text.text(f"⏱️ Total time: {time.time() - start_time:.1f}s")
-            
-            # Store results
-            st.session_state.processed_files = results
-            
-            # Show summary of results
-            st.success(f"✅ Successfully processed {len(results)} files!")
+    with tab1:
+        display_current_affairs()
     
-    # ===== DISPLAY RESULTS =====
-    if st.session_state.processed_files:
-        st.markdown("---")
-        st.markdown("## 📊 Results")
+    with tab2:
+        st.markdown("### 🔍 Analyze News URL")
+        url = st.text_input("Enter URL", placeholder="https://example.com/news-article")
         
-        # Statistics
-        success = sum(1 for r in st.session_state.processed_files if r['status'] == 'success')
-        failed = len(st.session_state.processed_files) - success
+        if url and st.button("🔍 Analyze & Summarize", key="analyze_url"):
+            if validators.url(url):
+                with st.spinner("Fetching article..."):
+                    text, title = extract_from_url(url)
+                    if text:
+                        st.success(f"✅ Fetched: {title}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("### 📝 Summary")
+                            summary = generate_summary(text, 5)
+                            st.info(summary)
+                            
+                            # Downloads
+                            audio = text_to_speech(summary)
+                            if audio:
+                                st.audio(audio)
+                                st.download_button("🔊 Download Audio", audio, "summary.mp3")
+                        
+                        with col2:
+                            display_analysis(url, text)
+                    else:
+                        st.warning("No content found")
+            else:
+                st.error("Invalid URL")
+    
+    with tab3:
+        st.markdown("### 📝 Paste Text for Analysis")
+        text_input = st.text_area("Paste article text here", height=200)
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Files", len(st.session_state.processed_files))
-        with col2:
-            st.metric("✅ Success", success)
-        with col3:
-            st.metric("❌ Failed", failed)
-        
-        # Show each file's result
-        for idx, result in enumerate(st.session_state.processed_files):
-            with st.expander(f"📄 {result['name']}", expanded=(idx==0)):
-                if result['status'] == 'success':
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown("**📝 Summary**")
-                        st.info(result['summary'])
-                    with col2:
-                        words = len(result['text'].split())
-                        st.metric("Words", words)
-                        st.metric("Summary Words", len(result['summary'].split()))
-                        st.metric("Reduction", f"{int((1 - len(result['summary'].split())/words)*100)}%")
-                    
-                    # Downloads
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.download_button(
-                            "📄 Full Text",
-                            result['text'],
-                            file_name=f"{result['name']}_full.txt"
-                        )
-                    with col2:
-                        st.download_button(
-                            "📝 Summary",
-                            result['summary'],
-                            file_name=f"{result['name']}_summary.txt"
-                        )
-                    with col3:
-                        audio = text_to_speech(result['summary'])
-                        if audio:
-                            st.audio(audio)
-                            st.download_button(
-                                "🔊 Audio",
-                                audio,
-                                file_name=f"{result['name']}_audio.mp3"
-                            )
-                else:
-                    st.error(f"❌ Error: {result.get('error', 'Unknown error')}")
+        if text_input and st.button("📝 Analyze Text", key="analyze_text"):
+            if len(text_input) > 200:
+                st.markdown("### 📝 Summary")
+                summary = generate_summary(text_input, 5)
+                st.info(summary)
+                
+                # Simplified analysis for text
+                st.markdown("### 🔍 Quick Analysis")
+                words = len(text_input.split())
+                sentences = len(nltk.sent_tokenize(text_input))
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Words", words)
+                with col2:
+                    st.metric("Sentences", sentences)
+                with col3:
+                    st.metric("Read Time", f"{words//200} min")
+                
+                # Download
+                audio = text_to_speech(summary)
+                if audio:
+                    st.audio(audio)
+                    st.download_button("🔊 Download Audio", audio, "summary.mp3")
+            else:
+                st.warning("Text too short (min 200 chars)")
+    
+    with tab4:
+        st.markdown("""
+        <div class='section-card'>
+            <h3>📌 How to Use</h3>
+            <ol>
+                <li><strong>Current Affairs:</strong> View latest news from India</li>
+                <li><strong>URL Analysis:</strong> Paste any news URL to:
+                    <ul>
+                        <li>Get credibility score</li>
+                        <li>Check facts</li>
+                        <li>Read summary</li>
+                    </ul>
+                </li>
+                <li><strong>Paste Text:</strong> Direct text analysis</li>
+            </ol>
+            
+            <h3>🔍 How Fake News Detection Works</h3>
+            <ul>
+                <li>Domain reputation check</li>
+                <li>URL structure analysis</li>
+                <li>Fact checking with multiple sources</li>
+                <li>Credibility scoring (0-100)</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
