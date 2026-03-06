@@ -894,7 +894,26 @@ def display_chatbot():
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<div class='clearfix'></div>", unsafe_allow_html=True)
     
-    # Chat input
+    # Chat input - FIXED BRACKET ISSUE
     col1, col2 = st.columns([5, 1])
     with col1:
-        user_input = st.text_input("", placeholder="Type your message here...",
+        user_input = st.text_input("", placeholder="Type your message here...", key="chat_input_fixed")  # ✅ Closed properly
+    with col2:
+        send = st.button("📤 Send", key="send_btn_fixed", use_container_width=True)
+    
+    if send and user_input:
+        # Add user message
+        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
+        
+        # Get response
+        context = st.session_state.get('current_summary', '')
+        response = get_bot_response(user_input, context)
+        
+        # Add bot response
+        st.session_state.chat_history.append({'role': 'bot', 'content': response})
+        st.rerun()
+    
+    # Clear button
+    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="clear_chat_fixed"):
+        st.session_state.chat_history = []
+        st.rerun()
