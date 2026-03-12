@@ -8,3 +8,9 @@ beautifulsoup4
 yt-dlp
 youtube-transcript-api
 sumy
+matplotlib
+numpy
+pandas
+scikit-learn
+wordcloud
+pillow
