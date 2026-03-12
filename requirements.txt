@@ -8,8 +8,4 @@ beautifulsoup4
 yt-dlp
 youtube-transcript-api
 sumy
-pandas
 matplotlib
-wordcloud
-pillow
-qrcode
