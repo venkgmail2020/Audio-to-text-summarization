@@ -291,7 +291,7 @@ def get_summary(text, num_sentences=5):
         return ' '.join(str(s) for s in summary)
     except Exception as e:
         st.warning(f"Summary generation failed: {e}")
-        return text
+        return text[:500] + "..."
 
 # ===== GET KEYWORDS =====
 def get_keywords(text, count=10):
@@ -303,39 +303,88 @@ def get_keywords(text, count=10):
     except:
         return []
 
-# ===== MAIN TABS =====
-tab1, tab2, tab3, tab4 = st.tabs(["📁 File Upload", "🔗 URL/YouTube", "📝 Paste Text", "ℹ️ Help"])
-
-with tab1:
-    file = st.file_uploader("Upload file", type=['mp4', 'mp3', 'wav', 'pdf', 'txt', 'avi', 'mov'])
+# ===== MAIN FUNCTION =====
+def main():
+    tab1, tab2, tab3, tab4 = st.tabs(["📁 File Upload", "🔗 URL/YouTube", "📝 Paste Text", "ℹ️ Help"])
     
-    if file:
-        ext = file.name.split('.')[-1].lower()
-        col1, col2 = st.columns(2)
-        with col1:
-            if ext in ['mp4', 'avi', 'mov']:
-                st.video(file)
-            elif ext in ['mp3', 'wav']:
-                st.audio(file)
-        with col2:
-            file_size = len(file.getvalue()) / (1024 * 1024)
-            st.info(f"📊 File: {file.name}\nSize: {file_size:.2f} MB")
+    with tab1:
+        file = st.file_uploader("Upload file", type=['mp4', 'mp3', 'wav', 'pdf', 'txt', 'avi', 'mov'])
         
-        if st.button("🚀 Process File", use_container_width=True):
-            with st.spinner("Processing..."):
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    tmp.write(file.getvalue())
-                    path = tmp.name
-                
-                if ext == 'pdf':
-                    text = extract_pdf_text(path)
-                elif ext == 'txt':
-                    with open(path, 'r', encoding='utf-8') as f:
-                        text = f.read()
+        if file:
+            ext = file.name.split('.')[-1].lower()
+            col1, col2 = st.columns(2)
+            with col1:
+                if ext in ['mp4', 'avi', 'mov']:
+                    st.video(file)
+                elif ext in ['mp3', 'wav']:
+                    st.audio(file)
+            with col2:
+                file_size = len(file.getvalue()) / (1024 * 1024)
+                st.info(f"📊 File: {file.name}\nSize: {file_size:.2f} MB")
+            
+            if st.button("🚀 Process File", use_container_width=True):
+                with st.spinner("Processing..."):
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                        tmp.write(file.getvalue())
+                        path = tmp.name
+                    
+                    if ext == 'pdf':
+                        text = extract_pdf_text(path)
+                    elif ext == 'txt':
+                        with open(path, 'r', encoding='utf-8') as f:
+                            text = f.read()
+                    else:
+                        text = transcribe_audio(path)
+                    
+                    os.unlink(path)
+                    
+                    if text:
+                        st.session_state['current_text'] = text
+                        summary = get_summary(text)
+                        keywords = get_keywords(text)
+                        
+                        st.markdown("## 📝 Summary")
+                        st.info(summary)
+                        
+                        st.markdown("## 🌍 Current Affairs Format")
+                        st.markdown(f"**Today's Headlines - {datetime.now().strftime('%B %d, %Y')}**")
+                        sentences = text.split('.')
+                        for i, sent in enumerate(sentences[:5]):
+                            if sent.strip():
+                                st.markdown(f"• {sent.strip()}.")
+                        
+                        if keywords:
+                            st.markdown("## 🏷️ Keywords")
+                            html = ""
+                            for word, count in keywords:
+                                html += f"<span class='keyword-tag'>{word}</span> "
+                            st.markdown(html, unsafe_allow_html=True)
+                        
+                        audio = text_to_speech(summary)
+                        if audio:
+                            st.audio(audio)
+                            st.download_button("🔊 Download Audio", audio, "summary.mp3")
+    
+    with tab2:
+        url = st.text_input("Enter URL", placeholder="https://example.com or YouTube link")
+        
+        if url and st.button("🌐 Fetch", use_container_width=True):
+            with st.spinner("Fetching content..."):
+                if 'youtube.com' in url or 'youtu.be' in url:
+                    text, source = get_youtube_text(url)
+                    if text:
+                        st.success(f"✅ Got content from {source}")
+                    else:
+                        st.error("Could not get video content")
+                elif validators.url(url):
+                    text = extract_url_text(url)
+                    if text:
+                        st.success("✅ Content fetched successfully")
+                    else:
+                        st.error("Could not fetch content")
                 else:
-                    text = transcribe_audio(path)
-                
-                os.unlink(path)
+                    st.error("Invalid URL")
+                    text = None
                 
                 if text:
                     st.session_state['current_text'] = text
@@ -346,7 +395,6 @@ with tab1:
                     st.info(summary)
                     
                     st.markdown("## 🌍 Current Affairs Format")
-                    st.markdown(f"**Today's Headlines - {datetime.now().strftime('%B %d, %Y')}**")
                     sentences = text.split('.')
                     for i, sent in enumerate(sentences[:5]):
                         if sent.strip():
@@ -363,38 +411,21 @@ with tab1:
                     if audio:
                         st.audio(audio)
                         st.download_button("🔊 Download Audio", audio, "summary.mp3")
-
-with tab2:
-    url = st.text_input("Enter URL", placeholder="https://example.com or YouTube link")
     
-    if url and st.button("🌐 Fetch", use_container_width=True):
-        with st.spinner("Fetching content..."):
-            if 'youtube.com' in url or 'youtu.be' in url:
-                text, source = get_youtube_text(url)
-                if text:
-                    st.success(f"✅ Got content from {source}")
-                else:
-                    st.error("Could not get video content")
-            elif validators.url(url):
-                text = extract_url_text(url)
-                if text:
-                    st.success("✅ Content fetched successfully")
-                else:
-                    st.error("Could not fetch content")
-            else:
-                st.error("Invalid URL")
-                text = None
-            
-            if text:
-                st.session_state['current_text'] = text
-                summary = get_summary(text)
-                keywords = get_keywords(text)
+    with tab3:
+        text_input = st.text_area("Paste your text here", height=200, placeholder="Paste news article, document, or any text...")
+        
+        if text_input and st.button("📝 Summarize", use_container_width=True):
+            if len(text_input) > 100:
+                st.session_state['current_text'] = text_input
+                summary = get_summary(text_input)
+                keywords = get_keywords(text_input)
                 
                 st.markdown("## 📝 Summary")
                 st.info(summary)
                 
                 st.markdown("## 🌍 Current Affairs Format")
-                sentences = text.split('.')
+                sentences = text_input.split('.')
                 for i, sent in enumerate(sentences[:5]):
                     if sent.strip():
                         st.markdown(f"• {sent.strip()}.")
@@ -410,62 +441,32 @@ with tab2:
                 if audio:
                     st.audio(audio)
                     st.download_button("🔊 Download Audio", audio, "summary.mp3")
-
-with tab3:
-    text_input = st.text_area("Paste your text here", height=200, placeholder="Paste news article, document, or any text...")
+            else:
+                st.warning("Text too short (minimum 100 characters)")
     
-    if text_input and st.button("📝 Summarize", use_container_width=True):
-        if len(text_input) > 100:
-            st.session_state['current_text'] = text_input
-            summary = get_summary(text_input)
-            keywords = get_keywords(text_input)
+    with tab4:
+        st.markdown("""
+        <div class='section-card'>
+            <h3>📌 How to Use</h3>
+            <ol>
+                <li><strong>Get AssemblyAI Key:</strong> Free from <a href='https://www.assemblyai.com/' target='_blank'>assemblyai.com</a> (for video/audio)</li>
+                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
+                <li><strong>Get Results:</strong> Summary, keywords, and audio</li>
+                <li><strong>Download:</strong> Save summary as audio</li>
+            </ol>
             
-            st.markdown("## 📝 Summary")
-            st.info(summary)
-            
-            st.markdown("## 🌍 Current Affairs Format")
-            sentences = text_input.split('.')
-            for i, sent in enumerate(sentences[:5]):
-                if sent.strip():
-                    st.markdown(f"• {sent.strip()}.")
-            
-            if keywords:
-                st.markdown("## 🏷️ Keywords")
-                html = ""
-                for word, count in keywords:
-                    html += f"<span class='keyword-tag'>{word}</span> "
-                st.markdown(html, unsafe_allow_html=True)
-            
-            audio = text_to_speech(summary)
-            if audio:
-                st.audio(audio)
-                st.download_button("🔊 Download Audio", audio, "summary.mp3")
-        else:
-            st.warning("Text too short (minimum 100 characters)")
-
-with tab4:
-    st.markdown("""
-    <div class='section-card'>
-        <h3>📌 How to Use</h3>
-        <ol>
-            <li><strong>Get AssemblyAI Key:</strong> Free from <a href='https://www.assemblyai.com/' target='_blank'>assemblyai.com</a> (for video/audio)</li>
-            <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
-            <li><strong>Get Results:</strong> Summary, keywords, and audio</li>
-            <li><strong>Download:</strong> Save summary as audio</li>
-        </ol>
-        
-        <h3>✨ Features</h3>
-        <ul>
-            <li>🎥 <strong>Video to Text</strong> - Transcribe video files</li>
-            <li>🎵 <strong>Audio to Text</strong> - Transcribe audio files</li>
-            <li>📄 <strong>PDF Extraction</strong> - Extract text from PDFs</li>
-            <li>🌐 <strong>URL/YouTube</strong> - Fetch content from web</li>
-            <li>📝 <strong>Text Summarization</strong> - Get key points</li>
-            <li>🏷️ <strong>Keywords</strong> - Important terms</li>
-            <li>🔊 <strong>Audio Download</strong> - Listen to summaries</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
+            <h3>✨ Features</h3>
+            <ul>
+                <li>🎥 <strong>Video to Text</strong> - Transcribe video files</li>
+                <li>🎵 <strong>Audio to Text</strong> - Transcribe audio files</li>
+                <li>📄 <strong>PDF Extraction</strong> - Extract text from PDFs</li>
+                <li>🌐 <strong>URL/YouTube</strong> - Fetch content from web</li>
+                <li>📝 <strong>Text Summarization</strong> - Get key points</li>
+                <li>🏷️ <strong>Keywords</strong> - Important terms</li>
+                <li>🔊 <strong>Audio Download</strong> - Listen to summaries</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
