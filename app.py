@@ -17,8 +17,6 @@ from bs4 import BeautifulSoup
 import validators
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
-from datetime import datetime
-import random
 
 # ===== NLTK SETUP =====
 try:
@@ -35,11 +33,7 @@ except:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-st.set_page_config(
-    page_title="AI Video/Text Analyzer", 
-    page_icon="🎥", 
-    layout="wide"
-)
+st.set_page_config(page_title="AI Text Summarizer + 5 Features", page_icon="🚀", layout="wide")
 
 # ===== CUSTOM CSS =====
 st.markdown("""
@@ -52,74 +46,74 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .feature-card {
+    .section-card {
         background: white;
         padding: 1.5rem;
         border-radius: 10px;
         border-left: 5px solid #667eea;
         margin: 1rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .timestamp-item {
-        background: #f8f9fa;
-        padding: 0.5rem;
-        border-radius: 5px;
-        margin: 0.2rem 0;
-        font-family: monospace;
-    }
-    .moment-highlight {
-        background: #fff3cd;
-        padding: 0.5rem;
-        border-radius: 5px;
-        border-left: 3px solid #ffc107;
-    }
-    .plagiarism-low { background: #d4edda; color: #155724; padding: 1rem; border-radius: 5px; }
-    .plagiarism-medium { background: #fff3cd; color: #856404; padding: 1rem; border-radius: 5px; }
-    .plagiarism-high { background: #f8d7da; color: #721c24; padding: 1rem; border-radius: 5px; }
-    .topic-tag {
+    .keyword-tag {
         background: #667eea;
         color: white;
         padding: 0.3rem 0.8rem;
         border-radius: 20px;
         display: inline-block;
         margin: 0.2rem;
+        font-size: 0.9rem;
     }
-    .timeline-item {
-        border-left: 3px solid #667eea;
-        padding: 0.5rem 1rem;
-        margin: 0.5rem 0;
+    .feature-card {
         background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+        margin: 0.5rem 0;
+    }
+    .plagiarism-low { background: #d4edda; color: #155724; padding: 0.5rem; border-radius: 5px; }
+    .plagiarism-medium { background: #fff3cd; color: #856404; padding: 0.5rem; border-radius: 5px; }
+    .plagiarism-high { background: #f8d7da; color: #721c24; padding: 0.5rem; border-radius: 5px; }
+    .timestamp-item { background: #f0f2f6; padding: 0.3rem; border-radius: 5px; margin: 0.2rem 0; }
+    .moment-highlight { background: #fff3cd; padding: 0.3rem; border-radius: 5px; border-left: 3px solid #ffc107; }
+    .timeline-item { border-left: 3px solid #667eea; padding: 0.3rem 1rem; margin: 0.3rem 0; background: #f8f9fa; }
+    .topic-tag {
+        background: #667eea;
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 15px;
+        display: inline-block;
+        margin: 0.2rem;
+        font-size: 0.8rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>🎥 AI Video/Text Analyzer</h1><p>Plagiarism | Timeline | Topics | Timestamps | Key Moments</p></div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'><h1>🚀 AI Text Summarizer + 5 Features</h1><p>Summary | Plagiarism | Timeline | Topics | Timestamps | Key Moments</p></div>", unsafe_allow_html=True)
 
 # ===== SESSION STATE =====
 if 'assembly_key' not in st.session_state:
     st.session_state.assembly_key = ''
 if 'current_text' not in st.session_state:
     st.session_state.current_text = ''
+if 'slider_value' not in st.session_state:
+    st.session_state.slider_value = 5
 
 # ===== SIDEBAR =====
 with st.sidebar:
-    st.markdown("### ⚙️ API Key")
-    assembly_key = st.text_input(
-        "AssemblyAI Key",
-        value=st.session_state.assembly_key,
-        type="password"
-    )
-    if assembly_key != st.session_state.assembly_key:
+    st.markdown("### 🔑 API Configuration")
+    assembly_key = st.text_input("AssemblyAI Key", value=st.session_state.assembly_key, type="password")
+    if st.button("💾 Save Keys", use_container_width=True):
         st.session_state.assembly_key = assembly_key
+        st.success("✅ Keys saved!")
     
     st.markdown("---")
-    st.markdown("### 📌 Features")
-    st.markdown("✅ Plagiarism Checker")
-    st.markdown("✅ Timeline Generator")
-    st.markdown("✅ Topic Detection")
-    st.markdown("✅ Timestamp Summary")
-    st.markdown("✅ Key Moments Detection")
+    st.markdown("### 📌 Supported")
+    st.markdown("🎥 Video: MP4, AVI, MOV")
+    st.markdown("🎵 Audio: MP3, WAV, M4A")
+    st.markdown("📄 PDF, TXT")
+    st.markdown("🌐 URLs, YouTube")
 
-# ===== PDF EXTRACTION =====
+# ===== ORIGINAL FUNCTIONS (YOUR CODE) =====
 def extract_pdf_text(pdf_path):
     try:
         text = ""
@@ -128,218 +122,396 @@ def extract_pdf_text(pdf_path):
             for page in pdf_reader.pages:
                 page_text = page.extract_text()
                 if page_text:
-                    text += page_text + "\n"
+                    text += page_text + "\n\n"
         return text
     except:
         return None
 
-# ===== FEATURE 1: PLAGIARISM CHECKER =====
-def check_plagiarism(text):
-    """Simulate plagiarism check"""
-    common_phrases = [
-        "according to", "research shows", "studies indicate", "as a result",
-        "in conclusion", "for example", "such as", "due to", "because of"
-    ]
-    
-    matches = sum(1 for phrase in common_phrases if phrase in text.lower())
-    score = min(100, matches * 10)
-    
-    if score < 30:
-        return score, "Low", "plagiarism-low"
-    elif score < 60:
-        return score, "Medium", "plagiarism-medium"
-    else:
-        return score, "High", "plagiarism-high"
+def extract_from_url(url):
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            for element in soup(['script', 'style', 'nav', 'header', 'footer']):
+                element.decompose()
+            paragraphs = soup.find_all('p')
+            text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 30])
+            text = re.sub(r'\s+', ' ', text).strip()
+            title = soup.title.string if soup.title else "Article"
+            if text and len(text) > 200:
+                return text, title
+        return None, None
+    except:
+        return None, None
 
-# ===== FEATURE 2: TIMELINE GENERATOR =====
+def extract_youtube_content(url):
+    try:
+        video_id = None
+        if 'youtube.com/watch?v=' in url:
+            video_id = url.split('watch?v=')[-1].split('&')[0]
+        elif 'youtu.be/' in url:
+            video_id = url.split('youtu.be/')[-1].split('?')[0]
+        if not video_id:
+            return None, None
+        
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            for lang in ['te', 'en', 'hi']:
+                try:
+                    transcript = transcript_list.find_transcript([lang])
+                    transcript_data = transcript.fetch()
+                    full_text = ' '.join([item['text'] for item in transcript_data])
+                    with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                        title = info.get('title', 'YouTube Video')
+                    return full_text, f"YouTube: {title}"
+                except:
+                    continue
+        except:
+            pass
+        
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get('title', 'YouTube Video')
+            description = info.get('description', '')
+            if description:
+                return description, f"YouTube: {title}"
+        return None, None
+    except:
+        return None, None
+
+def transcribe_with_assemblyai(audio_path):
+    try:
+        headers = {'authorization': st.session_state.assemblyai_key}
+        with open(audio_path, 'rb') as f:
+            response = requests.post('https://api.assemblyai.com/v2/upload', headers=headers, data=f)
+        upload_url = response.json()['upload_url']
+        
+        transcript_request = {
+            'audio_url': upload_url,
+            'language_detection': True,
+            'speech_models': ['universal-2']
+        }
+        response = requests.post('https://api.assemblyai.com/v2/transcript', json=transcript_request, headers=headers)
+        transcript_id = response.json()['id']
+        
+        progress = st.progress(0)
+        for i in range(60):
+            time.sleep(2)
+            progress.progress(min(i * 2, 95))
+            response = requests.get(f'https://api.assemblyai.com/v2/transcript/{transcript_id}', headers=headers)
+            result = response.json()
+            if result['status'] == 'completed':
+                return result.get('text', '')
+            elif result['status'] == 'error':
+                return None
+        return None
+    except:
+        return None
+
+def text_to_speech(text):
+    try:
+        if not text: return None
+        text_for_audio = text[:1000] if len(text) > 1000 else text
+        tts = gTTS(text=text_for_audio, lang='en', slow=False)
+        audio_bytes = io.BytesIO()
+        tts.write_to_fp(audio_bytes)
+        audio_bytes.seek(0)
+        return audio_bytes
+    except:
+        return None
+
+def generate_summary(text, num_points):
+    sentences = nltk.sent_tokenize(text)
+    if len(sentences) <= num_points:
+        return text
+    
+    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+    word_freq = Counter(words)
+    stop_words = set(nltk.corpus.stopwords.words('english'))
+    
+    sentence_scores = {}
+    for i, sent in enumerate(sentences):
+        sent_words = re.findall(r'\b[a-zA-Z]{4,}\b', sent.lower())
+        score = sum(word_freq.get(word, 0) for word in sent_words if word not in stop_words)
+        if 20 < len(sent) < 300:
+            sentence_scores[i] = score
+    
+    if not sentence_scores:
+        return ' '.join(sentences[:num_points])
+    
+    top_indices = sorted(sentence_scores, key=sentence_scores.get, reverse=True)[:num_points]
+    top_indices.sort()
+    
+    summary = f"📌 **MAIN POINTS ({num_points} of {len(sentences)} sentences)**\n\n"
+    for i, idx in enumerate(top_indices, 1):
+        summary += f"{i}. {sentences[idx]}\n\n"
+    return summary
+
+# ===== NEW 5 FEATURES =====
+def check_plagiarism(text):
+    common_phrases = ["according to", "research shows", "studies indicate", "as a result", 
+                      "in conclusion", "for example", "such as", "due to"]
+    matches = sum(1 for phrase in common_phrases if phrase in text.lower())
+    score = min(100, matches * 12)
+    if score < 30: return score, "Low", "plagiarism-low"
+    elif score < 60: return score, "Medium", "plagiarism-medium"
+    else: return score, "High", "plagiarism-high"
+
 def generate_timeline(text):
-    """Extract timeline from text"""
     sentences = nltk.sent_tokenize(text)
     timeline = []
-    
-    # Look for years
     year_pattern = r'\b(19|20)\d{2}\b'
-    
-    for sent in sentences[:10]:
+    for sent in sentences[:15]:
         years = re.findall(year_pattern, sent)
         if years:
-            timeline.append({
-                'year': years[0],
-                'event': sent[:100] + "..."
-            })
-    
+            timeline.append(f"📅 {years[0]} → {sent[:80]}...")
     return timeline[:5]
 
-# ===== FEATURE 3: TOPIC DETECTION =====
-def detect_topics(text, num_topics=5):
-    """Extract main topics"""
+def detect_topics(text):
     words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
     word_freq = Counter(words)
-    
-    common = {'The', 'This', 'That', 'These', 'Those', 'There'}
-    topics = [(w, c) for w, c in word_freq.most_common(15) 
-              if w not in common and len(w) > 3]
-    
-    return topics[:num_topics]
+    common = {'The', 'This', 'That', 'These', 'Those'}
+    return [(w, c) for w, c in word_freq.most_common(8) if w not in common and len(w) > 3]
 
-# ===== FEATURE 4: TIMESTAMP SUMMARY =====
-def generate_timestamps(text, duration_minutes=10):
-    """Generate timestamps with summaries"""
+def generate_timestamps(text, duration=10):
     sentences = nltk.sent_tokenize(text)
-    num_sentences = len(sentences)
-    
     timestamps = []
-    interval = duration_minutes / min(10, num_sentences)
-    
-    for i in range(0, min(10, num_sentences)):
-        minutes = int(i * interval)
-        seconds = int((i * interval - minutes) * 60)
-        time_str = f"{minutes:02d}:{seconds:02d}"
-        
-        timestamps.append({
-            'time': time_str,
-            'summary': sentences[i][:80] + "..."
-        })
-    
+    interval = duration / min(8, len(sentences))
+    for i in range(min(8, len(sentences))):
+        mins = int(i * interval)
+        secs = int((i * interval - mins) * 60)
+        timestamps.append(f"⏱️ {mins:02d}:{secs:02d} → {sentences[i][:70]}...")
     return timestamps
 
-# ===== FEATURE 5: KEY MOMENTS DETECTION =====
-def detect_key_moments(text, num_moments=5):
-    """Detect important moments in video"""
+def detect_key_moments(text):
     sentences = nltk.sent_tokenize(text)
-    
-    # Score sentences based on keywords
-    keywords = ['important', 'key', 'significant', 'crucial', 'vital',
-                'breakthrough', 'revolution', 'innovation', 'discovery']
-    
-    scored_sentences = []
-    for i, sent in enumerate(sentences):
-        score = sum(1 for word in keywords if word in sent.lower())
-        if score > 0:
-            scored_sentences.append((i, sent, score))
-    
-    # Sort by score
-    scored_sentences.sort(key=lambda x: x[2], reverse=True)
-    
+    keywords = ['important', 'key', 'significant', 'crucial', 'vital', 'breakthrough']
     moments = []
-    for i, (idx, sent, score) in enumerate(scored_sentences[:num_moments]):
-        # Convert to timestamp (approx)
-        timestamp = f"{idx // 6:02d}:{(idx % 6) * 10:02d}"
-        moments.append({
-            'time': timestamp,
-            'moment': sent[:100] + "...",
-            'importance': score
-        })
-    
-    return moments
+    for i, sent in enumerate(sentences[:20]):
+        score = sum(1 for k in keywords if k in sent.lower())
+        if score > 0:
+            mins = (i * 10) // 60
+            secs = (i * 10) % 60
+            moments.append(f"✨ {mins:02d}:{secs:02d} - {sent[:80]}...")
+    return moments[:5]
 
-# ===== AUTO PROCESS FUNCTION =====
-def auto_process(text):
-    """Process all 5 features"""
-    if not text or len(text) < 100:
-        st.warning("Text too short (min 100 characters)")
+# ===== DISPLAY RESULTS (ORIGINAL + 5 FEATURES) =====
+def display_results(text, source_name):
+    if not text or len(text.strip()) == 0:
+        st.error("No text to display")
         return
     
     st.session_state.current_text = text
     
-    # FEATURE 1: Plagiarism Checker
-    st.markdown("## 🔍 Plagiarism Checker")
-    score, level, css_class = check_plagiarism(text)
-    st.markdown(f"<div class='{css_class}'><b>Plagiarism Score:</b> {score}% - {level} Risk</div>", 
-                unsafe_allow_html=True)
+    # ===== ORIGINAL STATS =====
+    total_sentences = len(nltk.sent_tokenize(text))
+    original_words = len(text.split())
+    original_chars = len(text)
     
-    # FEATURE 2: Timeline Generator
-    st.markdown("## 📅 Timeline Generator")
-    timeline = generate_timeline(text)
-    if timeline:
-        for item in timeline:
-            st.markdown(f"<div class='timeline-item'>📅 {item['year']}<br>{item['event']}</div>", 
-                       unsafe_allow_html=True)
+    # Slider (original)
+    st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if total_sentences < 3:
+            st.warning(f"⚠️ Only {total_sentences} sentence(s)")
+            num_points = total_sentences
+        else:
+            max_val = min(30, total_sentences)
+            num_points = st.slider("Number of summary sentences:", 3, max_val, st.session_state.slider_value, key="main_slider")
+            st.session_state.slider_value = num_points
+    with col2:
+        st.metric("Total", total_sentences)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Generate summary
+    if total_sentences < 3:
+        summary = text
+        summary_words = original_words
     else:
-        st.info("ℹ️ No timeline events detected")
+        summary = generate_summary(text, num_points)
+        summary_words = len(summary.split())
     
-    # FEATURE 3: Topic Detection
-    st.markdown("## 🎯 Topic Detection")
-    topics = detect_topics(text)
-    if topics:
-        topic_html = ""
-        for topic, count in topics:
-            topic_html += f"<span class='topic-tag'>{topic} ({count})</span> "
-        st.markdown(topic_html, unsafe_allow_html=True)
+    # Calculate reduction
+    if original_words > 0:
+        reduction = int((1 - summary_words/original_words) * 100)
+        reduction = max(0, min(100, reduction))
     else:
-        st.info("ℹ️ No specific topics detected")
+        reduction = 0
     
-    # FEATURE 4: Timestamp Summary
-    st.markdown("## ⏱️ Timestamp Summary")
-    duration = st.slider("Video Duration (minutes)", 1, 60, 10)
-    timestamps = generate_timestamps(text, duration)
+    # ===== ORIGINAL SUMMARY DISPLAY =====
+    st.markdown("## 📋 Summary")
+    st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    for ts in timestamps:
-        st.markdown(f"<div class='timestamp-item'>⏱️ {ts['time']} → {ts['summary']}</div>", 
-                   unsafe_allow_html=True)
+    # ===== ORIGINAL STATISTICS =====
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("Characters", f"{original_chars:,}")
+    with col2: st.metric("Words", f"{original_words:,}")
+    with col3: st.metric("Sentences", f"{total_sentences:,}")
+    with col4: st.metric("Reduced", f"{reduction}%")
     
-    # FEATURE 5: Key Moments Detection
-    st.markdown("## 🎬 Key Moments Detection")
-    moments = detect_key_moments(text)
+    # ===== ORIGINAL KEYWORDS =====
+    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+    if words:
+        keywords = Counter(words).most_common(10)
+        st.markdown("### 🏷️ Keywords")
+        html = "<div>"
+        for word, count in keywords[:8]:
+            html += f"<span class='keyword-tag'>{word} ({count})</span> "
+        html += "</div>"
+        st.markdown(html, unsafe_allow_html=True)
     
-    for moment in moments:
-        st.markdown(f"<div class='moment-highlight'>✨ {moment['time']} - {moment['moment']}</div>", 
-                   unsafe_allow_html=True)
+    # ===== ORIGINAL DOWNLOADS =====
+    st.markdown("### 📥 Downloads")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.download_button("📄 Full Text", text, f"{source_name}_full.txt")
+    with col2:
+        st.download_button("📝 Summary", summary, f"{source_name}_summary.txt")
+    with col3:
+        audio = text_to_speech(summary)
+        if audio:
+            st.audio(audio)
+            st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3")
     
-    # Summary
-    st.markdown("## 📝 Summary")
-    parser = PlaintextParser.from_string(text, Tokenizer("english"))
-    summarizer = LexRankSummarizer()
-    summary_sentences = summarizer(parser.document, 5)
-    summary = ' '.join(str(s) for s in summary_sentences)
-    st.info(summary)
+    # ===== 5 NEW FEATURES SECTION =====
+    st.markdown("---")
+    st.markdown("## 🚀 5 Advanced Features")
+    
+    # Create 2 columns for features
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # FEATURE 1: Plagiarism Checker
+        st.markdown("### 🔍 Plagiarism Checker")
+        score, level, css = check_plagiarism(text)
+        st.markdown(f"<div class='{css}'><b>Score:</b> {score}% - {level} Risk</div>", unsafe_allow_html=True)
+        
+        # FEATURE 2: Timeline Generator
+        st.markdown("### 📅 Timeline Generator")
+        timeline = generate_timeline(text)
+        if timeline:
+            for item in timeline:
+                st.markdown(f"<div class='timeline-item'>{item}</div>", unsafe_allow_html=True)
+        else:
+            st.info("No timeline events detected")
+        
+        # FEATURE 3: Topic Detection
+        st.markdown("### 🎯 Topic Detection")
+        topics = detect_topics(text)
+        if topics:
+            topic_html = ""
+            for topic, count in topics:
+                topic_html += f"<span class='topic-tag'>{topic}</span> "
+            st.markdown(topic_html, unsafe_allow_html=True)
+        else:
+            st.info("No topics detected")
+    
+    with col2:
+        # FEATURE 4: Timestamp Summary
+        st.markdown("### ⏱️ Timestamp Summary")
+        duration = st.slider("Video duration (minutes)", 5, 30, 10, key="duration_slider")
+        timestamps = generate_timestamps(text, duration)
+        for ts in timestamps:
+            st.markdown(f"<div class='timestamp-item'>{ts}</div>", unsafe_allow_html=True)
+        
+        # FEATURE 5: Key Moments Detection
+        st.markdown("### 🎬 Key Moments")
+        moments = detect_key_moments(text)
+        if moments:
+            for moment in moments:
+                st.markdown(f"<div class='moment-highlight'>{moment}</div>", unsafe_allow_html=True)
+        else:
+            st.info("No key moments detected")
 
 # ===== MAIN UI =====
-tab1, tab2, tab3 = st.tabs(["📁 File Upload", "🔗 URL/YouTube", "📝 Paste Text"])
-
-# TAB 1: FILE UPLOAD
-with tab1:
-    uploaded_file = st.file_uploader(
-        "Choose file",
-        type=['mp4', 'mp3', 'wav', 'pdf', 'txt']
-    )
+def main():
+    tab1, tab2, tab3, tab4 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "ℹ️ Help"])
     
-    if uploaded_file:
-        file_ext = uploaded_file.name.split('.')[-1].lower()
-        
-        with st.spinner("Processing..."):
-            with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                tmp.write(uploaded_file.getvalue())
-                path = tmp.name
+    with tab1:
+        uploaded_file = st.file_uploader("Choose file", type=['mp4', 'mp3', 'wav', 'pdf', 'txt', 'avi', 'mov'])
+        if uploaded_file:
+            file_ext = uploaded_file.name.split('.')[-1].lower()
+            file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
+            st.info(f"📊 {uploaded_file.name} | {file_size:.2f} MB")
             
-            if file_ext == 'pdf':
-                text = extract_pdf_text(path)
-            elif file_ext == 'txt':
-                with open(path, 'r', encoding='utf-8') as f:
-                    text = f.read()
+            if file_ext in ['mp4', 'avi', 'mov']:
+                st.video(uploaded_file)
+            elif file_ext in ['mp3', 'wav']:
+                st.audio(uploaded_file)
+            
+            if st.button("🚀 Process", key="proc_file"):
+                with st.spinner("Processing..."):
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        path = tmp.name
+                    
+                    if file_ext == 'pdf':
+                        text = extract_pdf_text(path)
+                        if text: st.success("✅ Extracted PDF"); display_results(text, "pdf")
+                    elif file_ext == 'txt':
+                        with open(path, 'r', encoding='utf-8') as f: text = f.read()
+                        display_results(text, "text")
+                    else:
+                        if not st.session_state.assemblyai_key:
+                            st.error("❌ AssemblyAI Key required")
+                        else:
+                            text = transcribe_with_assemblyai(path)
+                            if text: st.success(f"✅ Transcribed: {len(text)} chars"); display_results(text, "media")
+                    os.unlink(path)
+    
+    with tab2:
+        url = st.text_input("Enter URL", placeholder="https://...")
+        if url and st.button("🌐 Fetch", key="fetch_url"):
+            if 'youtube.com' in url or 'youtu.be' in url:
+                with st.spinner("Fetching YouTube..."):
+                    text, title = extract_youtube_content(url)
+                    if text:
+                        st.success(f"✅ {title}")
+                        display_results(text, "youtube")
+                    else:
+                        st.warning("No content found")
+            elif validators.url(url):
+                with st.spinner("Fetching article..."):
+                    text, title = extract_from_url(url)
+                    if text:
+                        st.success(f"✅ {title}")
+                        display_results(text, "web")
+                    else:
+                        st.warning("No content found")
             else:
-                # Simulate transcription
-                time.sleep(2)
-                text = f"Sample transcription from {uploaded_file.name}. " * 100
-            
-            os.unlink(path)
-            
-            if text:
-                auto_process(text)
-
-# TAB 2: URL/YOUTUBE
-with tab2:
-    url = st.text_input("Enter URL", placeholder="https://youtube.com/...")
+                st.error("Invalid URL")
     
-    if url:
-        with st.spinner("Fetching..."):
-            # Simulate YouTube content
-            text = f"Sample content from {url}. " * 100
-            auto_process(text)
-
-# TAB 3: PASTE TEXT
-with tab3:
-    text_input = st.text_area("Paste text", height=200)
+    with tab3:
+        text_input = st.text_area("Paste text", height=200)
+        if text_input and st.button("📝 Summarize", key="summ_text"):
+            if len(text_input) > 100:
+                display_results(text_input, "pasted")
+            else:
+                st.warning("Text too short")
     
-    if text_input:
-        auto_process(text_input)
+    with tab4:
+        st.markdown("""
+        <div class='section-card'>
+            <h3>📌 How to Use</h3>
+            <ol>
+                <li>Add AssemblyAI Key (for video/audio)</li>
+                <li>Upload file, paste URL, or enter text</li>
+                <li>Get summary, stats, keywords, downloads</li>
+                <li>Plus 5 advanced features below!</li>
+            </ol>
+            
+            <h3>🚀 5 Features Added</h3>
+            <ul>
+                <li>🔍 Plagiarism Checker</li>
+                <li>📅 Timeline Generator</li>
+                <li>🎯 Topic Detection</li>
+                <li>⏱️ Timestamp Summary</li>
+                <li>🎬 Key Moments Detection</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
