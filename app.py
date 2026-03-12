@@ -39,10 +39,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# ===== CUSTOM CSS - ORANGE THEME =====
+# ===== CUSTOM CSS - GOLD THEME =====
 st.markdown("""
 <style>
-    /* Main header - Orange gradient */
+    /* Main header - Gold gradient */
     .main-header {
         background: linear-gradient(135deg, #ff8c42, #ff5e3a);
         padding: 2rem;
