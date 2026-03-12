@@ -33,62 +33,189 @@ except:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-st.set_page_config(page_title="AI Text Summarizer + 5 Features", page_icon="🚀", layout="wide")
+st.set_page_config(
+    page_title="Audio to Text Summarizer", 
+    page_icon="🎤", 
+    layout="wide"
+)
 
-# ===== CUSTOM CSS =====
+# ===== CUSTOM CSS - ORANGE THEME =====
 st.markdown("""
 <style>
+    /* Main header - Orange gradient */
     .main-header {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
         padding: 2rem;
-        border-radius: 15px;
+        border-radius: 30px 30px 30px 30px;
         color: white;
         text-align: center;
         margin-bottom: 2rem;
+        box-shadow: 0 10px 20px rgba(255, 94, 58, 0.3);
     }
+    
+    /* Section cards - Rounded, no rectangles */
     .section-card {
-        background: white;
+        background: #fff5e6;
         padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 5px solid #667eea;
+        border-radius: 25px;
+        border-left: none;
         margin: 1rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: 0 5px 15px rgba(255, 94, 58, 0.1);
     }
+    
+    /* Keyword tags - Orange */
     .keyword-tag {
-        background: #667eea;
+        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
         color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
+        padding: 0.4rem 1rem;
+        border-radius: 50px;
+        display: inline-block;
+        margin: 0.3rem;
+        font-size: 0.9rem;
+        box-shadow: 0 3px 8px rgba(255, 94, 58, 0.2);
+    }
+    
+    /* Feature tags in sidebar */
+    .feature-tag {
+        background: #fff5e6;
+        color: #ff5e3a;
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
         display: inline-block;
         margin: 0.2rem;
         font-size: 0.9rem;
+        border: 1px solid #ff8c42;
     }
-    .feature-card {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #667eea;
-        margin: 0.5rem 0;
-    }
-    .plagiarism-low { background: #d4edda; color: #155724; padding: 0.5rem; border-radius: 5px; }
-    .plagiarism-medium { background: #fff3cd; color: #856404; padding: 0.5rem; border-radius: 5px; }
-    .plagiarism-high { background: #f8d7da; color: #721c24; padding: 0.5rem; border-radius: 5px; }
-    .timestamp-item { background: #f0f2f6; padding: 0.3rem; border-radius: 5px; margin: 0.2rem 0; }
-    .moment-highlight { background: #fff3cd; padding: 0.3rem; border-radius: 5px; border-left: 3px solid #ffc107; }
-    .timeline-item { border-left: 3px solid #667eea; padding: 0.3rem 1rem; margin: 0.3rem 0; background: #f8f9fa; }
-    .topic-tag {
-        background: #667eea;
+    
+    /* Buttons - Orange rounded */
+    .stButton > button {
+        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
         color: white;
-        padding: 0.2rem 0.6rem;
-        border-radius: 15px;
-        display: inline-block;
-        margin: 0.2rem;
-        font-size: 0.8rem;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 50px;
+        font-weight: bold;
+        width: 100%;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 15px rgba(255, 94, 58, 0.3);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(255, 94, 58, 0.4);
+    }
+    
+    /* Tabs - Orange rounded */
+    .stTabs [data-baseweb="tab-list"] {
+        background: #fff5e6;
+        padding: 0.5rem;
+        border-radius: 50px;
+        gap: 0.5rem;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #ff5e3a;
+        border-radius: 50px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
+        color: white;
+    }
+    
+    /* Slider container */
+    .slider-container {
+        background: #fff5e6;
+        padding: 1.5rem;
+        border-radius: 30px;
+        margin: 1rem 0;
+        border: none;
+    }
+    
+    /* Metric boxes - Rounded */
+    .metric-box {
+        background: #fff5e6;
+        padding: 1.2rem;
+        border-radius: 25px;
+        text-align: center;
+        box-shadow: 0 5px 10px rgba(255, 94, 58, 0.1);
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: #fff9f0;
+        padding: 1rem;
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: #ff5e3a;
+    }
+    
+    /* Feature cards in sidebar */
+    .sidebar-feature {
+        background: white;
+        padding: 1rem;
+        border-radius: 20px;
+        margin: 0.5rem 0;
+        border-left: none;
+        box-shadow: 0 3px 10px rgba(255, 94, 58, 0.1);
+    }
+    
+    /* Plagiarism indicators - Rounded */
+    .plagiarism-low { 
+        background: #d4edda; 
+        color: #155724; 
+        padding: 0.8rem; 
+        border-radius: 20px; 
+        margin: 0.3rem 0;
+    }
+    .plagiarism-medium { 
+        background: #fff3cd; 
+        color: #856404; 
+        padding: 0.8rem; 
+        border-radius: 20px; 
+        margin: 0.3rem 0;
+    }
+    .plagiarism-high { 
+        background: #f8d7da; 
+        color: #721c24; 
+        padding: 0.8rem; 
+        border-radius: 20px; 
+        margin: 0.3rem 0;
+    }
+    
+    /* Timeline items - Rounded */
+    .timeline-item { 
+        background: #fff5e6; 
+        padding: 0.8rem 1.2rem; 
+        border-radius: 20px; 
+        margin: 0.5rem 0; 
+        border-left: none;
+    }
+    
+    /* Timestamp items - Rounded */
+    .timestamp-item { 
+        background: #fff5e6; 
+        padding: 0.6rem 1rem; 
+        border-radius: 15px; 
+        margin: 0.3rem 0; 
+    }
+    
+    /* Moment highlight - Rounded */
+    .moment-highlight { 
+        background: #fff3cd; 
+        padding: 0.6rem 1rem; 
+        border-radius: 15px; 
+        margin: 0.3rem 0; 
+        border-left: none;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>🚀 AI Text Summarizer + 5 Features</h1><p>Summary | Plagiarism | Timeline | Topics | Timestamps | Key Moments</p></div>", unsafe_allow_html=True)
+# ===== HEADER - Orange =====
+st.markdown("<div class='main-header'><h1>🎤 Audio to Text Summarizer</h1><p>Transform your audio, video, PDF, and text into smart summaries</p></div>", unsafe_allow_html=True)
 
 # ===== SESSION STATE =====
 if 'assembly_key' not in st.session_state:
@@ -101,7 +228,13 @@ if 'slider_value' not in st.session_state:
 # ===== SIDEBAR =====
 with st.sidebar:
     st.markdown("### 🔑 API Configuration")
-    assembly_key = st.text_input("AssemblyAI Key", value=st.session_state.assembly_key, type="password")
+    
+    assembly_key = st.text_input(
+        "AssemblyAI Key",
+        value=st.session_state.assembly_key,
+        type="password"
+    )
+    
     if st.button("💾 Save Keys", use_container_width=True):
         st.session_state.assembly_key = assembly_key
         st.success("✅ Keys saved!")
@@ -112,8 +245,27 @@ with st.sidebar:
     st.markdown("🎵 Audio: MP3, WAV, M4A")
     st.markdown("📄 PDF, TXT")
     st.markdown("🌐 URLs, YouTube")
+    
+    # ===== 5 FEATURES IN SIDEBAR =====
+    st.markdown("---")
+    st.markdown("### 🚀 5 Features")
+    
+    with st.expander("🔍 Plagiarism Checker", expanded=True):
+        st.markdown("<div class='sidebar-feature'>Check text originality</div>", unsafe_allow_html=True)
+    
+    with st.expander("📅 Timeline Generator", expanded=True):
+        st.markdown("<div class='sidebar-feature'>Convert to timeline</div>", unsafe_allow_html=True)
+    
+    with st.expander("🎯 Topic Detection", expanded=True):
+        st.markdown("<div class='sidebar-feature'>Identify main topics</div>", unsafe_allow_html=True)
+    
+    with st.expander("⏱️ Timestamp Summary", expanded=True):
+        st.markdown("<div class='sidebar-feature'>Time-wise summary</div>", unsafe_allow_html=True)
+    
+    with st.expander("🎬 Key Moments", expanded=True):
+        st.markdown("<div class='sidebar-feature'>Important moments</div>", unsafe_allow_html=True)
 
-# ===== ORIGINAL FUNCTIONS (YOUR CODE) =====
+# ===== ORIGINAL FUNCTIONS =====
 def extract_pdf_text(pdf_path):
     try:
         text = ""
@@ -249,7 +401,7 @@ def generate_summary(text, num_points):
         summary += f"{i}. {sentences[idx]}\n\n"
     return summary
 
-# ===== NEW 5 FEATURES =====
+# ===== 5 FEATURES FUNCTIONS =====
 def check_plagiarism(text):
     common_phrases = ["according to", "research shows", "studies indicate", "as a result", 
                       "in conclusion", "for example", "such as", "due to"]
@@ -297,7 +449,7 @@ def detect_key_moments(text):
             moments.append(f"✨ {mins:02d}:{secs:02d} - {sent[:80]}...")
     return moments[:5]
 
-# ===== DISPLAY RESULTS (ORIGINAL + 5 FEATURES) =====
+# ===== DISPLAY RESULTS =====
 def display_results(text, source_name):
     if not text or len(text.strip()) == 0:
         st.error("No text to display")
@@ -305,12 +457,11 @@ def display_results(text, source_name):
     
     st.session_state.current_text = text
     
-    # ===== ORIGINAL STATS =====
     total_sentences = len(nltk.sent_tokenize(text))
     original_words = len(text.split())
     original_chars = len(text)
     
-    # Slider (original)
+    # Slider
     st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -340,18 +491,22 @@ def display_results(text, source_name):
     else:
         reduction = 0
     
-    # ===== ORIGINAL SUMMARY DISPLAY =====
+    # Summary
     st.markdown("## 📋 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    # ===== ORIGINAL STATISTICS =====
+    # Statistics
     col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric("Characters", f"{original_chars:,}")
-    with col2: st.metric("Words", f"{original_words:,}")
-    with col3: st.metric("Sentences", f"{total_sentences:,}")
-    with col4: st.metric("Reduced", f"{reduction}%")
+    with col1: 
+        st.markdown(f"<div class='metric-box'><b>Characters</b><br><h2>{original_chars:,}</h2></div>", unsafe_allow_html=True)
+    with col2: 
+        st.markdown(f"<div class='metric-box'><b>Words</b><br><h2>{original_words:,}</h2></div>", unsafe_allow_html=True)
+    with col3: 
+        st.markdown(f"<div class='metric-box'><b>Sentences</b><br><h2>{total_sentences:,}</h2></div>", unsafe_allow_html=True)
+    with col4: 
+        st.markdown(f"<div class='metric-box'><b>Reduced</b><br><h2>{reduction}%</h2></div>", unsafe_allow_html=True)
     
-    # ===== ORIGINAL KEYWORDS =====
+    # Keywords
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
     if words:
         keywords = Counter(words).most_common(10)
@@ -362,7 +517,7 @@ def display_results(text, source_name):
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
     
-    # ===== ORIGINAL DOWNLOADS =====
+    # Downloads
     st.markdown("### 📥 Downloads")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -375,20 +530,19 @@ def display_results(text, source_name):
             st.audio(audio)
             st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3")
     
-    # ===== 5 NEW FEATURES SECTION =====
+    # ===== 5 FEATURES =====
     st.markdown("---")
-    st.markdown("## 🚀 5 Advanced Features")
+    st.markdown("## 🚀 5 Features")
     
-    # Create 2 columns for features
     col1, col2 = st.columns(2)
     
     with col1:
-        # FEATURE 1: Plagiarism Checker
+        # Feature 1: Plagiarism
         st.markdown("### 🔍 Plagiarism Checker")
         score, level, css = check_plagiarism(text)
         st.markdown(f"<div class='{css}'><b>Score:</b> {score}% - {level} Risk</div>", unsafe_allow_html=True)
         
-        # FEATURE 2: Timeline Generator
+        # Feature 2: Timeline
         st.markdown("### 📅 Timeline Generator")
         timeline = generate_timeline(text)
         if timeline:
@@ -397,26 +551,26 @@ def display_results(text, source_name):
         else:
             st.info("No timeline events detected")
         
-        # FEATURE 3: Topic Detection
+        # Feature 3: Topics
         st.markdown("### 🎯 Topic Detection")
         topics = detect_topics(text)
         if topics:
             topic_html = ""
             for topic, count in topics:
-                topic_html += f"<span class='topic-tag'>{topic}</span> "
+                topic_html += f"<span class='keyword-tag'>{topic}</span> "
             st.markdown(topic_html, unsafe_allow_html=True)
         else:
             st.info("No topics detected")
     
     with col2:
-        # FEATURE 4: Timestamp Summary
+        # Feature 4: Timestamps
         st.markdown("### ⏱️ Timestamp Summary")
         duration = st.slider("Video duration (minutes)", 5, 30, 10, key="duration_slider")
         timestamps = generate_timestamps(text, duration)
         for ts in timestamps:
             st.markdown(f"<div class='timestamp-item'>{ts}</div>", unsafe_allow_html=True)
         
-        # FEATURE 5: Key Moments Detection
+        # Feature 5: Key Moments
         st.markdown("### 🎬 Key Moments")
         moments = detect_key_moments(text)
         if moments:
@@ -502,7 +656,7 @@ def main():
                 <li>Plus 5 advanced features below!</li>
             </ol>
             
-            <h3>🚀 5 Features Added</h3>
+            <h3>🚀 5 Features</h3>
             <ul>
                 <li>🔍 Plagiarism Checker</li>
                 <li>📅 Timeline Generator</li>
