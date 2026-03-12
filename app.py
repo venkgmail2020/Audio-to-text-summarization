@@ -92,12 +92,15 @@ st.markdown("""
         border: 2px dashed #667eea;
         margin: 1rem 0;
     }
+    .fixed-height {
+        min-height: 50px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>🚀 AI Research Assistant</h1><p>Video | Audio | PDF | URL | Text + Smart Search & Infographics</p></div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'><h1>🚀 AI Research Assistant</h1><p>Video | Audio | PDF | URL | Text + No Refresh Features</p></div>", unsafe_allow_html=True)
 
-# ===== SESSION STATE =====
+# ===== SESSION STATE INITIALIZATION =====
 if 'assembly_key' not in st.session_state:
     st.session_state.assembly_key = ''
 if 'current_text' not in st.session_state:
@@ -106,6 +109,14 @@ if 'current_summary' not in st.session_state:
     st.session_state.current_summary = ''
 if 'search_results' not in st.session_state:
     st.session_state.search_results = []
+if 'search_query' not in st.session_state:
+    st.session_state.search_query = ''
+if 'search_done' not in st.session_state:
+    st.session_state.search_done = False
+if 'infographic_fig' not in st.session_state:
+    st.session_state.infographic_fig = None
+if 'show_infographic' not in st.session_state:
+    st.session_state.show_infographic = False
 
 # ===== SIDEBAR =====
 with st.sidebar:
@@ -130,9 +141,9 @@ with st.sidebar:
     st.markdown("🌐 **Online:** URLs, YouTube")
     
     st.markdown("---")
-    st.markdown("### 🚀 Advanced Features")
-    st.markdown("🔍 **Smart Search** - Search inside documents")
-    st.markdown("📊 **Infographic Generator** - Visual summaries")
+    st.markdown("### 🚀 Features")
+    st.markdown("🔍 **Smart Search** - No refresh")
+    st.markdown("📊 **Infographic** - No refresh")
 
 # ===== PDF EXTRACTION =====
 def extract_pdf_text(pdf_path):
@@ -177,7 +188,6 @@ def extract_youtube_content(url):
         if not video_id:
             return None
         
-        # Try transcript first
         try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             for lang in ['te', 'en', 'hi']:
@@ -191,7 +201,6 @@ def extract_youtube_content(url):
         except:
             pass
         
-        # Fallback to description
         with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
             info = ydl.extract_info(url, download=False)
             return info.get('description', '')
@@ -276,7 +285,7 @@ def extract_keywords(text, num=15):
     filtered = [w for w in words if w not in stop_words]
     return Counter(filtered).most_common(num)
 
-# ===== 🔍 SMART SEARCH INSIDE DOCUMENT =====
+# ===== 🔍 SMART SEARCH FUNCTION =====
 def search_in_document(text, query):
     """Search for specific information in the document"""
     if not text or not query:
@@ -288,27 +297,18 @@ def search_in_document(text, query):
     
     for i, sent in enumerate(sentences):
         sent_lower = sent.lower()
-        # Check if any query word is in the sentence
         if any(word in sent_lower for word in query_words):
-            # Highlight matching words
-            highlighted = sent
-            for word in query_words:
-                pattern = re.compile(re.escape(word), re.IGNORECASE)
-                highlighted = pattern.sub(f"**{word}**", highlighted)
-            
             results.append({
                 'sentence': sent,
-                'highlighted': highlighted,
                 'index': i
             })
     
     return results
 
-# ===== 📊 AUTO INFOGRAPHIC GENERATOR =====
+# ===== 📊 INFOGRAPHIC GENERATOR =====
 def generate_infographic(text, keywords):
     """Generate a simple infographic from text"""
     
-    # Create a figure for infographic
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.patch.set_facecolor('#f8f9fa')
     
@@ -378,7 +378,7 @@ def generate_infographic(text, keywords):
     plt.tight_layout()
     return fig
 
-# ===== DISPLAY RESULTS =====
+# ===== DISPLAY RESULTS WITH NO REFRESH FEATURES =====
 def display_results(text, source_name):
     if not text or len(text.strip()) == 0:
         st.error("No text to display")
@@ -414,51 +414,87 @@ def display_results(text, source_name):
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
     
-    # ===== 🔍 SMART SEARCH FEATURE =====
+    # ===== 🔍 SMART SEARCH - NO REFRESH =====
     with st.expander("🔍 Smart Search Inside Document", expanded=False):
         st.markdown("### Search for specific information")
-        search_query = st.text_input("Enter your search term:", placeholder="e.g., AI advantages, machine learning, etc.")
         
-        if search_query and st.button("🔎 Search"):
-            results = search_in_document(text, search_query)
-            if results:
-                st.success(f"✅ Found {len(results)} matching sentences")
-                for i, res in enumerate(results[:10]):
-                    st.markdown(f"**{i+1}.** {res['sentence']}")
-            else:
-                st.warning("❌ No matches found")
+        # Search input
+        search_query = st.text_input(
+            "Enter your search term:",
+            value=st.session_state.search_query,
+            placeholder="e.g., AI advantages, machine learning, etc.",
+            key="search_input"
+        )
+        st.session_state.search_query = search_query
+        
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("🔎 Search", key="search_btn"):
+                if search_query:
+                    results = search_in_document(text, search_query)
+                    st.session_state.search_results = results
+                    st.session_state.search_done = True
+        
+        with col2:
+            if st.session_state.search_results:
+                if st.button("❌ Clear Results", key="clear_search"):
+                    st.session_state.search_results = []
+                    st.session_state.search_query = ''
+                    st.session_state.search_done = False
+                    st.rerun()
+        
+        # Display results
+        if st.session_state.search_results:
+            results = st.session_state.search_results
+            st.success(f"✅ Found {len(results)} matching sentences")
+            for i, res in enumerate(results[:10]):
+                st.markdown(f"**{i+1}.** {res['sentence']}")
     
-    # ===== 📊 AUTO INFOGRAPHIC FEATURE =====
+    # ===== 📊 AUTO INFOGRAPHIC - NO REFRESH =====
     with st.expander("📊 Auto Infographic Generator", expanded=False):
         st.markdown("### Visual Summary")
-        if st.button("🎨 Generate Infographic"):
-            with st.spinner("Creating infographic..."):
-                fig = generate_infographic(text, keywords)
-                st.pyplot(fig)
-                
-                # Save infographic
-                img_bytes = io.BytesIO()
-                fig.savefig(img_bytes, format='png', dpi=100, bbox_inches='tight')
-                img_bytes.seek(0)
-                st.download_button(
-                    "📥 Download Infographic",
-                    img_bytes,
-                    file_name="infographic.png",
-                    mime="image/png"
-                )
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("🎨 Generate Infographic", key="gen_infographic"):
+                with st.spinner("Creating infographic..."):
+                    fig = generate_infographic(text, keywords)
+                    st.session_state.infographic_fig = fig
+                    st.session_state.show_infographic = True
+        
+        with col2:
+            if st.session_state.infographic_fig is not None:
+                if st.button("❌ Clear", key="clear_infographic"):
+                    st.session_state.infographic_fig = None
+                    st.session_state.show_infographic = False
+                    st.rerun()
+        
+        if st.session_state.infographic_fig is not None:
+            st.pyplot(st.session_state.infographic_fig)
+            
+            img_bytes = io.BytesIO()
+            st.session_state.infographic_fig.savefig(img_bytes, format='png', dpi=100, bbox_inches='tight')
+            img_bytes.seek(0)
+            st.download_button(
+                "📥 Download Infographic",
+                img_bytes,
+                file_name="infographic.png",
+                mime="image/png",
+                key="download_infographic"
+            )
     
     # Downloads
     st.markdown("### 📥 Downloads")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.download_button("📄 Full Text", text, f"{source_name}_full.txt")
+        st.download_button("📄 Full Text", text, f"{source_name}_full.txt", key="download_full")
     with col2:
-        st.download_button("📝 Summary", summary, f"{source_name}_summary.txt")
+        st.download_button("📝 Summary", summary, f"{source_name}_summary.txt", key="download_summary")
     with col3:
         audio = text_to_speech(summary)
         if audio:
             st.audio(audio)
-            st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3")
+            st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3", key="download_audio")
 
 # ===== MAIN UI =====
 def main():
@@ -539,25 +575,16 @@ def main():
                 <li>📝 <strong>Smart Summarization</strong> - LexRank algorithm</li>
                 <li>🏷️ <strong>Keyword Extraction</strong> - Important terms</li>
                 <li>🔊 <strong>Text-to-Speech</strong> - Listen to summaries</li>
-                <li>🔍 <strong>Smart Search</strong> - Search inside documents</li>
-                <li>📊 <strong>Infographic Generator</strong> - Visual summaries</li>
+                <li>🔍 <strong>Smart Search</strong> - No refresh! Search inside documents</li>
+                <li>📊 <strong>Infographic Generator</strong> - No refresh! Visual summaries</li>
             </ul>
             
-            <h4>🔍 How to Use Smart Search:</h4>
-            <ol>
-                <li>Process any file/URL/text first</li>
-                <li>Expand "Smart Search Inside Document" section</li>
-                <li>Enter search term (e.g., "AI advantages")</li>
-                <li>Click Search to find relevant sentences</li>
-            </ol>
-            
-            <h4>📊 How to Use Infographic Generator:</h4>
-            <ol>
-                <li>Process any file/URL/text first</li>
-                <li>Expand "Auto Infographic Generator" section</li>
-                <li>Click "Generate Infographic"</li>
-                <li>Download as PNG</li>
-            </ol>
+            <h4>🔍 No Refresh Features:</h4>
+            <ul>
+                <li>✅ Search button click - Page won't refresh</li>
+                <li>✅ Infographic generate - Page won't refresh</li>
+                <li>✅ Clear buttons work properly</li>
+            </ul>
         </div>
         """, unsafe_allow_html=True)
 
