@@ -21,7 +21,6 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import hashlib
-from difflib import SequenceMatcher
 
 # ===== NLTK SETUP =====
 try:
@@ -39,7 +38,7 @@ except:
     nltk.download('punkt_tab')
 
 st.set_page_config(
-    page_title="Auto AI Research Assistant", 
+    page_title="AI Research Assistant", 
     page_icon="🤖", 
     layout="wide"
 )
@@ -55,30 +54,30 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .feature-card {
-        background: white;
+    .summary-box {
+        background: #f0f2f6;
         padding: 1.5rem;
         border-radius: 10px;
         border-left: 5px solid #667eea;
-        margin: 1rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        font-size: 1.1rem;
+        line-height: 1.6;
     }
     .plagiarism-high {
         background: #ff4444;
         color: white;
-        padding: 0.5rem;
+        padding: 1rem;
         border-radius: 5px;
     }
     .plagiarism-medium {
         background: #ffbb33;
         color: black;
-        padding: 0.5rem;
+        padding: 1rem;
         border-radius: 5px;
     }
     .plagiarism-low {
         background: #00C851;
         color: white;
-        padding: 0.5rem;
+        padding: 1rem;
         border-radius: 5px;
     }
     .timeline-item {
@@ -95,27 +94,30 @@ st.markdown("""
         display: inline-block;
         margin: 0.2rem;
     }
-    .search-highlight {
-        background-color: #ffff99;
-        padding: 2px;
-        border-radius: 3px;
+    .search-result {
+        background: #f0f2f6;
+        padding: 0.5rem;
+        border-radius: 5px;
+        margin: 0.3rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>🤖 Auto AI Research Assistant</h1><p>5 Features Auto-Detect: Plagiarism | Timeline | Topics | Search | Infographic</p></div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'><h1>🤖 AI Research Assistant</h1><p>Summarization | Plagiarism | Timeline | Topics | Search | Infographic</p></div>", unsafe_allow_html=True)
 
 # ===== SESSION STATE =====
 if 'assembly_key' not in st.session_state:
     st.session_state.assembly_key = ''
 if 'current_text' not in st.session_state:
     st.session_state.current_text = ''
+if 'current_summary' not in st.session_state:
+    st.session_state.current_summary = ''
 if 'processed' not in st.session_state:
     st.session_state.processed = False
 
 # ===== SIDEBAR =====
 with st.sidebar:
-    st.markdown("### ⚙️ API Key")
+    st.markdown("### ⚙️ Configuration")
     assembly_key = st.text_input(
         "AssemblyAI Key",
         value=st.session_state.assembly_key,
@@ -125,10 +127,34 @@ with st.sidebar:
         st.session_state.assembly_key = assembly_key
     
     st.markdown("---")
-    st.markdown("### 📊 Live Stats")
-    if st.session_state.current_text:
-        words = len(st.session_state.current_text.split())
-        st.metric("Current Words", f"{words}")
+    st.markdown("### 📊 Statistics")
+    if st.session_state.current_summary:
+        words = len(st.session_state.current_summary.split())
+        st.metric("Last Summary", f"{words} words")
+    
+    st.markdown("### 📌 Supported")
+    st.markdown("🎥 Video: MP4, AVI, MOV")
+    st.markdown("🎵 Audio: MP3, WAV, M4A")
+    st.markdown("📄 Document: PDF, TXT")
+    st.markdown("🌐 Online: URLs, YouTube")
+
+# ===== FEATURE 0: SUMMARIZATION (FIXED) =====
+def generate_summary(text, num_sentences=5):
+    """Generate summary using LexRank"""
+    try:
+        if not text or len(text) < 100:
+            return text
+        
+        # Use LexRank for better summaries
+        parser = PlaintextParser.from_string(text, Tokenizer("english"))
+        summarizer = LexRankSummarizer()
+        summary_sentences = summarizer(parser.document, num_sentences)
+        summary = ' '.join(str(s) for s in summary_sentences)
+        return summary
+    except Exception as e:
+        # Fallback to simple extractive summary
+        sentences = nltk.sent_tokenize(text)
+        return ' '.join(sentences[:num_sentences])
 
 # ===== FEATURE 1: PLAGIARISM CHECKER =====
 def check_plagiarism(text):
@@ -136,10 +162,11 @@ def check_plagiarism(text):
     words = text.lower().split()
     total_words = len(words)
     
-    # Simulate common phrases detection
+    # Common phrases that might indicate plagiarism
     common_phrases = [
-        "according to", "research shows", "studies indicate",
-        "as a result", "in conclusion", "for example"
+        "according to", "research shows", "studies indicate", "as a result",
+        "in conclusion", "for example", "such as", "due to", "because of",
+        "in addition", "furthermore", "moreover", "however", "therefore"
     ]
     
     matches = 0
@@ -147,12 +174,12 @@ def check_plagiarism(text):
         if phrase in text.lower():
             matches += 1
     
-    plagiarism_score = min(100, (matches * 10))
+    plagiarism_score = min(100, matches * 5)
     
-    if plagiarism_score > 70:
+    if plagiarism_score > 50:
         level = "High"
         color = "plagiarism-high"
-    elif plagiarism_score > 40:
+    elif plagiarism_score > 20:
         level = "Medium"
         color = "plagiarism-medium"
     else:
@@ -171,19 +198,21 @@ def generate_timeline(text):
     date_patterns = [
         r'\b\d{4}\b',  # Years
         r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b',
-        r'\b\d{1,2}/\d{1,2}/\d{4}\b'
+        r'\b\d{1,2}/\d{1,2}/\d{4}\b',
+        r'\b\d{4}-\d{2}-\d{2}\b'
     ]
     
-    for i, sent in enumerate(sentences):
+    for sent in sentences:
         for pattern in date_patterns:
-            if re.search(pattern, sent, re.IGNORECASE):
+            match = re.search(pattern, sent, re.IGNORECASE)
+            if match:
                 timeline.append({
-                    'date': re.search(pattern, sent).group(),
-                    'event': sent[:100]
+                    'date': match.group(),
+                    'event': sent[:150] + "..." if len(sent) > 150 else sent
                 })
                 break
     
-    return timeline[:5]  # Return top 5
+    return timeline[:5]
 
 # ===== FEATURE 3: TOPIC DETECTION =====
 def detect_topics(text, num_topics=5):
@@ -192,15 +221,15 @@ def detect_topics(text, num_topics=5):
     word_freq = Counter(words)
     
     # Filter out common words
-    common = {'The', 'This', 'That', 'These', 'Those', 'There'}
-    topics = [(w, c) for w, c in word_freq.most_common(15) if w not in common]
+    common = {'The', 'This', 'That', 'These', 'Those', 'There', 'They', 'What', 'Which'}
+    topics = [(w, c) for w, c in word_freq.most_common(15) if w not in common and len(w) > 3]
     
     return topics[:num_topics]
 
 # ===== FEATURE 4: SMART SEARCH =====
 def smart_search(text, query):
     """Search inside document"""
-    if not query:
+    if not query or len(query) < 2:
         return []
     
     sentences = nltk.sent_tokenize(text)
@@ -229,12 +258,14 @@ def generate_infographic(text, topics):
         words_list, counts_list = zip(*word_counts)
         ax1.barh(words_list, counts_list, color='#667eea')
         ax1.set_title('Top Keywords', fontsize=12, fontweight='bold')
+        ax1.set_xlabel('Frequency')
     
     # 2. Topic Distribution
     if topics:
         ax2 = axes[0, 1]
         topic_names, topic_counts = zip(*topics)
-        ax2.pie(topic_counts, labels=topic_names, autopct='%1.1f%%', colors=['#667eea', '#764ba2', '#ff6b6b', '#4ecdc4', '#45b7d1'])
+        ax2.pie(topic_counts, labels=topic_names, autopct='%1.1f%%', 
+                colors=['#667eea', '#764ba2', '#ff6b6b', '#4ecdc4', '#45b7d1'])
         ax2.set_title('Topic Distribution', fontsize=12, fontweight='bold')
     
     # 3. Sentence Length Distribution
@@ -244,6 +275,7 @@ def generate_infographic(text, topics):
     ax3.hist(sent_lengths, bins=15, color='#764ba2', alpha=0.7)
     ax3.set_title('Sentence Length Distribution', fontsize=12, fontweight='bold')
     ax3.set_xlabel('Words per Sentence')
+    ax3.set_ylabel('Frequency')
     
     # 4. Text Statistics
     ax4 = axes[1, 1]
@@ -259,7 +291,7 @@ def generate_infographic(text, topics):
     Total Words: {total_words:,}
     Unique Words: {unique_words:,}
     Total Sentences: {total_sents}
-    Avg Word Length: {total_words/total_sents:.1f}
+    Avg Sentence: {total_words/total_sents:.1f} words
     Reading Time: {total_words//200} min
     
     🎯 TOP TOPICS
@@ -293,31 +325,39 @@ def extract_url_text(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        for tag in soup(['script', 'style']):
-            tag.decompose()
-        return ' '.join(p.get_text() for p in soup.find_all('p'))
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            for tag in soup(['script', 'style']):
+                tag.decompose()
+            return ' '.join(p.get_text() for p in soup.find_all('p'))
     except:
         return None
 
 # ===== AUTO PROCESS FUNCTION =====
 def auto_process(text):
-    """Auto generate all 5 features"""
+    """Auto generate all 6 features"""
     if not text or len(text) < 100:
+        st.warning("Text too short (min 100 characters)")
         return
     
     st.session_state.current_text = text
     
-    # Feature 1: Plagiarism Check
+    # FEATURE 0: SUMMARY (FIXED)
+    st.markdown("## 📝 Summary")
+    summary = generate_summary(text, 5)
+    st.session_state.current_summary = summary
+    st.markdown(f"<div class='summary-box'>{summary}</div>", unsafe_allow_html=True)
+    
+    # FEATURE 1: Plagiarism Check
     with st.container():
         st.markdown("---")
         st.markdown("## 🔍 Plagiarism Checker")
         score, level, color = check_plagiarism(text)
-        st.markdown(f"<div class='{color}' style='padding:1rem; border-radius:5px;'>"
+        st.markdown(f"<div class='{color}'>"
                    f"<b>Plagiarism Score:</b> {score}% - {level} Risk</div>", 
                    unsafe_allow_html=True)
     
-    # Feature 2: Timeline
+    # FEATURE 2: Timeline
     st.markdown("## 📅 Timeline Generator")
     timeline = generate_timeline(text)
     if timeline:
@@ -325,9 +365,9 @@ def auto_process(text):
             st.markdown(f"<div class='timeline-item'>📅 {item['date']}<br>{item['event']}</div>", 
                        unsafe_allow_html=True)
     else:
-        st.info("No timeline events detected")
+        st.info("ℹ️ No timeline events detected")
     
-    # Feature 3: Topic Detection
+    # FEATURE 3: Topic Detection
     st.markdown("## 🎯 Topic Detection")
     topics = detect_topics(text)
     if topics:
@@ -336,20 +376,30 @@ def auto_process(text):
             topic_html += f"<span class='topic-tag'>{topic} ({count})</span> "
         st.markdown(topic_html, unsafe_allow_html=True)
     else:
-        st.info("No specific topics detected")
+        st.info("ℹ️ No specific topics detected")
     
-    # Feature 4: Smart Search
+    # FEATURE 4: Smart Search (with unique key)
     st.markdown("## 🔎 Smart Document Search")
-    search_query = st.text_input("Enter search term", placeholder="Type to search...", key="search")
+    
+    # Create unique key for search
+    import random
+    search_key = f"search_{random.randint(1000, 9999)}"
+    
+    search_query = st.text_input(
+        "Enter search term", 
+        placeholder="Type to search...", 
+        key=search_key
+    )
+    
     if search_query:
         results = smart_search(text, search_query)
         if results:
-            for res in results:
-                st.markdown(f"<div class='search-highlight'>{res}</div>", unsafe_allow_html=True)
+            for i, res in enumerate(results):
+                st.markdown(f"<div class='search-result'>{i+1}. {res}</div>", unsafe_allow_html=True)
         else:
-            st.info("No matches found")
+            st.info("ℹ️ No matches found")
     
-    # Feature 5: Infographic
+    # FEATURE 5: Infographic
     st.markdown("## 📊 Auto Infographic")
     fig = generate_infographic(text, topics)
     st.pyplot(fig)
@@ -388,9 +438,9 @@ with tab1:
                 with open(path, 'r', encoding='utf-8') as f:
                     text = f.read()
             else:
-                # For demo - simulate transcription
-                time.sleep(1)
-                text = f"Sample transcription from {uploaded_file.name}. " * 50
+                # Simulate transcription for demo
+                time.sleep(2)
+                text = f"Sample transcription from {uploaded_file.name}. " * 100
             
             os.unlink(path)
             
@@ -399,33 +449,33 @@ with tab1:
 
 # TAB 2: URL/YOUTUBE
 with tab2:
-    url = st.text_input("Enter URL", placeholder="https://...")
+    url = st.text_input("Enter URL", placeholder="https://example.com or YouTube link")
     
     if url:
         with st.spinner("Auto-fetching and analyzing..."):
             if 'youtube.com' in url or 'youtu.be' in url:
                 # Simulate YouTube content
-                text = f"YouTube video content from {url}. " * 50
+                text = f"YouTube video content from {url}. " * 100
             else:
-                text = extract_url_text(url) or f"Sample article content from {url}. " * 50
+                text = extract_url_text(url)
+                if not text:
+                    text = f"Sample article content from {url}. " * 100
             
             if text:
                 auto_process(text)
 
 # TAB 3: PASTE TEXT
 with tab3:
-    text_input = st.text_area("Paste text", height=200, placeholder="Paste your content here...")
+    text_input = st.text_area("Paste text", height=200, 
+                              placeholder="Paste your article, document, or notes here...")
     
-    if text_input and len(text_input) > 100:
-        with st.spinner("Auto-analyzing..."):
-            auto_process(text_input)
-    elif text_input:
-        st.warning("Please enter at least 100 characters")
+    if text_input:
+        auto_process(text_input)
 
 # ===== FOOTER =====
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 1rem;'>
-    🤖 5 Features Auto-Detect | No Buttons Needed!
+    🤖 All 6 Features Auto-Generated | Summarization | Plagiarism | Timeline | Topics | Search | Infographic
 </div>
 """, unsafe_allow_html=True)
