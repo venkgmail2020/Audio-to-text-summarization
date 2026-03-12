@@ -2,7 +2,7 @@ streamlit
 requests
 nltk
 PyPDF2
-gTTS
+gtts
 validators
 beautifulsoup4
 yt-dlp
