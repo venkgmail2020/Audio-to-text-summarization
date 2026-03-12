@@ -10,16 +10,13 @@ from collections import Counter
 from gtts import gTTS
 import io
 import base64
-from sumy.parsers.plaintext import PlaintextParser
+from sumy.parsers.plaintext import PlaintextParser  # ✅ Fixed
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import ssl
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse
 import validators
-from datetime import datetime
-import json
-import random
 
 # ===== NLTK DOWNLOAD =====
 try:
