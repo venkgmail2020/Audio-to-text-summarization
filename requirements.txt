@@ -10,4 +10,6 @@ youtube-transcript-api
 sumy
 pandas
 matplotlib
-numpy
+wordcloud
+pillow
+qrcode
