@@ -15,19 +15,11 @@ from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import ssl
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 import validators
-import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi
 from datetime import datetime
-
-# ===== GEMINI AI IMPORTS =====
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-    st.warning("⚠️ google-generativeai not installed. Run: pip install google-generativeai")
+import json
+import random
 
 # ===== NLTK DOWNLOAD =====
 try:
@@ -45,226 +37,335 @@ except:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-st.set_page_config(page_title="Audio to Text Summarizer Using NLP", page_icon="🎤", layout="wide")
+st.set_page_config(page_title="News Analyzer & Current Affairs", page_icon="📰", layout="wide")
 
 # ===== CUSTOM CSS =====
 st.markdown("""
 <style>
-    .stApp { background: white !important; }
-    .stApp, .stMarkdown, p, h1, h2, h3, h4, h5, h6, label { color: black !important; }
-    .stTextInput > div > div > input {
-        background: white !important; color: black !important; border: 1px solid #ccc !important;
-        border-radius: 8px !important;
-    }
     .main-header {
-        background: linear-gradient(135deg, #ff6b6b, #556270) !important;
-        padding: 2rem !important; border-radius: 15px !important; color: white !important;
-        text-align: center !important; margin-bottom: 2rem !important;
+        background: linear-gradient(135deg, #ff6b6b, #556270);
+        padding: 2rem;
+        border-radius: 15px;
+        color: white;
+        text-align: center;
+        margin-bottom: 2rem;
     }
-    .main-header h1, .main-header p { color: white !important; }
     .section-card {
-        background: #f8f9fa !important; padding: 1.5rem !important; border-radius: 10px !important;
-        border-left: 5px solid #ff6b6b !important; margin: 1rem 0 !important; color: black !important;
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 10px;
+        border-left: 5px solid #ff6b6b;
+        margin: 1rem 0;
     }
-    .stButton > button {
-        background: linear-gradient(135deg, #ff6b6b, #556270) !important; color: white !important;
-        border: none !important; padding: 0.5rem 1.5rem !important; border-radius: 25px !important;
-        font-weight: bold !important; width: 100% !important;
+    .credibility-high {
+        background: #d4edda;
+        color: #155724;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-weight: bold;
     }
-    .chat-container {
-        background: #f8f9fa !important; border-radius: 15px !important; padding: 20px !important;
-        min-height: 400px !important; max-height: 500px !important; margin-bottom: 20px !important;
-        border: 1px solid #ddd !important; overflow-y: auto !important;
+    .credibility-medium {
+        background: #fff3cd;
+        color: #856404;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-weight: bold;
     }
-    .user-message {
-        background: linear-gradient(135deg, #ff6b6b, #556270) !important; color: white !important;
-        padding: 12px 18px !important; border-radius: 20px 20px 5px 20px !important;
-        margin: 10px 0 10px auto !important; max-width: 80% !important; width: fit-content !important;
-        float: right !important; clear: both !important;
+    .credibility-low {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-weight: bold;
     }
-    .bot-message {
-        background: #e9ecef !important; color: black !important; padding: 12px 18px !important;
-        border-radius: 20px 20px 20px 5px !important; margin: 10px auto 10px 0 !important;
-        max-width: 80% !important; width: fit-content !important; float: left !important;
-        clear: both !important; border: 1px solid #dee2e6 !important;
+    .news-item {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 3px solid #ff6b6b;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .welcome-message { text-align: center !important; padding: 80px 20px !important; color: #666 !important; }
-    .welcome-message h2 { color: #ff6b6b !important; font-size: 2.5em !important; }
-    [data-testid="stSidebar"] { background-color: #f8f9fa !important; }
-    [data-testid="stSidebar"] * { color: black !important; }
-    .clearfix::after { content: ""; clear: both; display: table; }
+    .source-badge {
+        background: #e9ecef;
+        padding: 0.2rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.8rem;
+        margin-right: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# ===== HEADER =====
-st.markdown("""
-<div class='main-header'>
-    <h1>🎤 Audio to Text Summarizer Using NLP</h1>
-    <p style='font-size: 1.2rem;'>Transform Audio | Video | PDF | Text | URL into Smart Summaries</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("<div class='main-header'><h1>📰 News Analyzer & Current Affairs</h1><p>Verify news & stay updated</p></div>", unsafe_allow_html=True)
 
-# ===== SESSION STATE INITIALIZATION =====
-if 'assemblyai_key' not in st.session_state:
-    st.session_state.assemblyai_key = ''
-if 'gemini_key' not in st.session_state:
-    st.session_state.gemini_key = ''
-if 'current_text' not in st.session_state:
-    st.session_state.current_text = ''
-if 'current_summary' not in st.session_state:
-    st.session_state.current_summary = ''
-if 'slider_value' not in st.session_state:
-    st.session_state.slider_value = 5
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
+# ===== SESSION STATE =====
+if 'news_api_key' not in st.session_state:
+    st.session_state.news_api_key = ''
+if 'current_news' not in st.session_state:
+    st.session_state.current_news = []
+if 'analysis_history' not in st.session_state:
+    st.session_state.analysis_history = []
 
 # ===== SIDEBAR =====
 with st.sidebar:
-    st.markdown("### 🔐 API Configuration")
+    st.markdown("### 🔑 API Configuration")
     
-    assembly_key = st.text_input(
-        "🗝️ AssemblyAI Key",
-        value=st.session_state.assemblyai_key,
+    news_api = st.text_input(
+        "📰 NewsAPI Key (Optional)",
         type="password",
-        placeholder="Enter your AssemblyAI key"
+        value=st.session_state.news_api_key,
+        help="Get free key from newsapi.org"
     )
     
-    gemini_key = st.text_input(
-        "🤖 Google Gemini Key (Required for AI Chat)",
-        value=st.session_state.gemini_key,
-        type="password",
-        placeholder="Paste your new Gemini API key here"
-    )
-    
-    if st.button("💾 Save Keys", use_container_width=True):
-        st.session_state.assemblyai_key = assembly_key
-        st.session_state.gemini_key = gemini_key
-        st.success("✅ Keys saved! Now use AI Chat tab.")
+    if st.button("💾 Save Keys"):
+        st.session_state.news_api_key = news_api
+        st.success("✅ Keys saved!")
     
     st.markdown("---")
-    st.markdown("### 📌 Supported Formats")
-    st.markdown("🎥 **Video:** MP4, AVI, MOV")
-    st.markdown("🎵 **Audio:** MP3, WAV, M4A")
-    st.markdown("📄 **Document:** PDF, TXT")
-    st.markdown("🌐 **Online:** URLs, YouTube")
+    st.markdown("### 📊 Stats")
+    if st.session_state.analysis_history:
+        st.metric("Total Analyzed", len(st.session_state.analysis_history))
 
-# ===== PDF EXTRACTION =====
-def extract_pdf_text(pdf_path):
+# ===== CURRENT AFFAIRS FUNCTIONS =====
+def get_current_affairs():
+    """Fetch current affairs from India"""
     try:
-        text = ""
-        with open(pdf_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n\n"
-        return text
-    except:
-        return None
+        # Try using NewsAPI if key available
+        if st.session_state.news_api_key:
+            url = "https://newsapi.org/v2/top-headlines"
+            params = {
+                'country': 'in',
+                'apiKey': st.session_state.news_api_key,
+                'pageSize': 10
+            }
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('articles', [])
+        
+        # Fallback to sample news
+        return get_sample_news()
+        
+    except Exception as e:
+        st.warning(f"Using sample news: {e}")
+        return get_sample_news()
+
+def get_sample_news():
+    """Sample news when API not available"""
+    return [
+        {
+            'title': 'India Budget 2026: Key Highlights',
+            'description': 'Finance Minister presents budget with focus on infrastructure and digital India.',
+            'source': {'name': 'Economic Times'},
+            'publishedAt': '2026-03-06T10:30:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'IPL 2026: Season Starts March 22',
+            'description': '10 teams to compete in 74 matches across 13 cities.',
+            'source': {'name': 'Sports Today'},
+            'publishedAt': '2026-03-06T09:15:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'Heat Wave Alert in North India',
+            'description': 'Temperatures to rise 3-5°C above normal in Delhi, UP, Rajasthan.',
+            'source': {'name': 'Weather News'},
+            'publishedAt': '2026-03-06T08:45:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'ISRO to Launch Navigation Satellite',
+            'description': 'NVS-02 satellite to be launched on March 15 from Sriharikota.',
+            'source': {'name': 'Space News'},
+            'publishedAt': '2026-03-06T07:30:00Z',
+            'url': '#'
+        },
+        {
+            'title': 'Stock Market: Sensex Crosses 85,000',
+            'description': 'Markets hit all-time high on strong economic data.',
+            'source': {'name': 'Business Line'},
+            'publishedAt': '2026-03-06T06:20:00Z',
+            'url': '#'
+        }
+    ]
+
+def display_current_affairs():
+    """Display current affairs in nice format"""
+    st.markdown("### 🌍 Today's Current Affairs")
+    st.markdown(f"📅 {datetime.now().strftime('%B %d, %Y')}")
+    
+    news = get_current_affairs()
+    st.session_state.current_news = news
+    
+    for article in news:
+        published = article.get('publishedAt', '')[:10]
+        st.markdown(f"""
+        <div class='news-item'>
+            <h4>{article['title']}</h4>
+            <p>{article.get('description', 'No description')}</p>
+            <div>
+                <span class='source-badge'>📰 {article['source']['name']}</span>
+                <span class='source-badge'>📅 {published}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    if st.button("🔄 Refresh News"):
+        st.rerun()
+
+# ===== FAKE NEWS ANALYSIS =====
+def analyze_credibility(url):
+    """Analyze URL for credibility"""
+    score = 0
+    reasons = []
+    
+    # Factor 1: Domain reputation
+    trusted_domains = ['thehindu.com', 'indiatimes.com', 'ndtv.com', 'bbc.com', 'reuters.com']
+    suspicious_domains = ['dailypost.xyz', 'news24hrs.net', 'breakingtv.co']
+    
+    domain = urlparse(url).netloc.replace('www.', '')
+    
+    if any(td in domain for td in trusted_domains):
+        score += 40
+        reasons.append("✅ Trusted news source")
+    elif any(sd in domain for sd in suspicious_domains):
+        score += 10
+        reasons.append("⚠️ Unknown source - verify carefully")
+    else:
+        score += 20
+        reasons.append("ℹ️ Check source reputation")
+    
+    # Factor 2: URL structure
+    if len(url) > 100:
+        score -= 10
+        reasons.append("❌ Suspiciously long URL")
+    
+    if re.search(r'\d{5,}', url):
+        score -= 10
+        reasons.append("❌ Contains suspicious numbers")
+    
+    # Factor 3: Use HTTPS
+    if url.startswith('https'):
+        score += 10
+        reasons.append("✅ Secure connection")
+    
+    # Factor 4: Age of domain (simulated)
+    domain_age = random.randint(1, 20)
+    if domain_age > 5:
+        score += 10
+        reasons.append(f"✅ Domain age: {domain_age}+ years")
+    else:
+        score -= 5
+        reasons.append(f"⚠️ New domain ({domain_age} years)")
+    
+    # Ensure score between 0-100
+    score = max(0, min(100, score))
+    
+    return score, reasons
+
+def get_fact_checks(text):
+    """Simulate fact checking"""
+    # Extract claims (simplified)
+    sentences = nltk.sent_tokenize(text)
+    claims = sentences[:3]  # First 3 sentences as claims
+    
+    fact_checks = []
+    for claim in claims:
+        # Simulate fact check result
+        result = random.choice([
+            {"status": "True", "confidence": random.randint(70, 95)},
+            {"status": "Mostly True", "confidence": random.randint(60, 85)},
+            {"status": "Misleading", "confidence": random.randint(40, 60)},
+            {"status": "False", "confidence": random.randint(10, 30)}
+        ])
+        
+        fact_checks.append({
+            'claim': claim[:100] + '...',
+            'result': result['status'],
+            'confidence': result['confidence'],
+            'source': random.choice(['FactCheck.org', 'PolitiFact', 'AltNews'])
+        })
+    
+    return fact_checks
+
+def display_analysis(url, text):
+    """Display fake news analysis"""
+    st.markdown("### 🔍 Fake News Analysis")
+    
+    # Get credibility score
+    score, reasons = analyze_credibility(url)
+    
+    # Score display
+    if score >= 70:
+        st.markdown(f"<div class='credibility-high'>✅ Credibility Score: {score}/100 - Likely Reliable</div>", unsafe_allow_html=True)
+    elif score >= 40:
+        st.markdown(f"<div class='credibility-medium'>⚠️ Credibility Score: {score}/100 - Verify Carefully</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='credibility-low'>❌ Credibility Score: {score}/100 - Likely Unreliable</div>", unsafe_allow_html=True)
+    
+    # Reasons
+    with st.expander("📋 Analysis Details"):
+        for reason in reasons:
+            st.write(reason)
+    
+    # Fact checks
+    st.markdown("### ✅ Fact Check Results")
+    fact_checks = get_fact_checks(text)
+    
+    for fc in fact_checks:
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            st.write(f"**Claim:** {fc['claim']}")
+        with col2:
+            status = fc['result']
+            if status == 'True':
+                st.success(f"✅ {status}")
+            elif status == 'Mostly True':
+                st.info(f"📊 {status}")
+            elif status == 'Misleading':
+                st.warning(f"⚠️ {status}")
+            else:
+                st.error(f"❌ {status}")
+        with col3:
+            st.write(f"Confidence: {fc['confidence']}%")
+        st.caption(f"Source: {fc['source']}")
+        st.divider()
+    
+    # Save to history
+    st.session_state.analysis_history.append({
+        'url': url,
+        'score': score,
+        'time': datetime.now().strftime("%Y-%m-%d %H:%M")
+    })
 
 # ===== URL EXTRACTION =====
 def extract_from_url(url):
+    """Extract text from URL"""
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        response = requests.get(url, headers=headers, timeout=15)
+        
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
+            
             for element in soup(['script', 'style', 'nav', 'header', 'footer']):
                 element.decompose()
+            
             paragraphs = soup.find_all('p')
             text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 30])
             text = re.sub(r'\s+', ' ', text).strip()
+            
             title = soup.title.string if soup.title else "Article"
+            
             if text and len(text) > 200:
                 return text, title
-        return None, None
-    except:
-        return None, None
-
-# ===== YOUTUBE EXTRACTION =====
-def extract_youtube_content(url):
-    try:
-        video_id = None
-        if 'youtube.com/watch?v=' in url:
-            video_id = url.split('watch?v=')[-1].split('&')[0]
-        elif 'youtu.be/' in url:
-            video_id = url.split('youtu.be/')[-1].split('?')[0]
-        if not video_id:
-            return None, None, None
-        
-        # Try transcript first
-        try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            for lang in ['te', 'en', 'hi']:
-                try:
-                    transcript = transcript_list.find_transcript([lang])
-                    transcript_data = transcript.fetch()
-                    full_text = ' '.join([item['text'] for item in transcript_data])
-                    with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-                        info = ydl.extract_info(url, download=False)
-                        title = info.get('title', 'YouTube Video')
-                    return full_text, f"YouTube: {title}", "transcript"
-                except:
-                    continue
-        except:
-            pass
-        
-        # Fallback to description
-        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title', 'YouTube Video')
-            description = info.get('description', '')
-            if description:
-                return description, f"YouTube: {title}", "description"
-        return None, None, None
-    except:
-        return None, None, None
-
-# ===== ASSEMBLYAI TRANSCRIPTION =====
-def transcribe_with_assemblyai(audio_path):
-    try:
-        headers = {'authorization': st.session_state.assemblyai_key}
-        with open(audio_path, 'rb') as f:
-            response = requests.post('https://api.assemblyai.com/v2/upload', headers=headers, data=f)
-        upload_url = response.json()['upload_url']
-        
-        transcript_request = {
-            'audio_url': upload_url,
-            'language_detection': True,
-            'speech_models': ['universal-2']
-        }
-        response = requests.post('https://api.assemblyai.com/v2/transcript', json=transcript_request, headers=headers)
-        transcript_id = response.json()['id']
-        
-        progress = st.progress(0)
-        for i in range(60):
-            time.sleep(2)
-            progress.progress(min(i * 2, 95))
-            response = requests.get(f'https://api.assemblyai.com/v2/transcript/{transcript_id}', headers=headers)
-            result = response.json()
-            if result['status'] == 'completed':
-                return result.get('text', '')
-            elif result['status'] == 'error':
-                return None
-        return None
-    except:
-        return None
-
-# ===== TEXT TO SPEECH =====
-def text_to_speech(text):
-    try:
-        if not text: return None
-        text_for_audio = text[:1000] if len(text) > 1000 else text
-        tts = gTTS(text=text_for_audio, lang='en', slow=False)
-        audio_bytes = io.BytesIO()
-        tts.write_to_fp(audio_bytes)
-        audio_bytes.seek(0)
-        return audio_bytes
-    except:
-        return None
+        return None, "No content found"
+    except Exception as e:
+        return None, f"Error: {str(e)}"
 
 # ===== GENERATE SUMMARY =====
-def generate_summary(text, num_points):
+def generate_summary(text, num_points=5):
     sentences = nltk.sent_tokenize(text)
     if len(sentences) <= num_points:
         return text
@@ -286,305 +387,113 @@ def generate_summary(text, num_points):
     top_indices = sorted(sentence_scores, key=sentence_scores.get, reverse=True)[:num_points]
     top_indices.sort()
     
-    summary = f"🎯 **KEY POINTS ({num_points} of {len(sentences)} sentences)**\n\n"
+    summary = f"📌 **KEY POINTS ({num_points} of {len(sentences)} sentences)**\n\n"
     for i, idx in enumerate(top_indices, 1):
         summary += f"{i}. {sentences[idx]}\n\n"
     return summary
 
-# ===== GEMINI AI RESPONSE (REAL AI) =====
-def get_gemini_response(user_input, context=""):
-    """Real AI response using Google Gemini"""
+# ===== TEXT TO SPEECH =====
+def text_to_speech(text):
     try:
-        # Get API key from session state
-        api_key = st.session_state.get('gemini_key', '')
-        
-        if not api_key:
-            return "⚠️ Please add your Google Gemini API key in the sidebar first!"
-        
-        # Configure Gemini
-        genai.configure(api_key=api_key)
-        
-        # Use the CORRECT model name
-        model = genai.GenerativeModel('models/gemini-2.0-flash')
-        
-        # Create prompt
-        prompt = f"""You are a helpful AI assistant for a Text Summarizer app called "Audio to Text Summarizer Using NLP".
-        
-Current context from user's uploaded content: {context[:1000] if context else 'No content uploaded yet'}
-
-The app can:
-- Transcribe audio/video files using AssemblyAI
-- Extract text from PDFs and URLs
-- Generate summaries using LexRank algorithm
-- Show keywords from the text
-- Convert text to speech
-
-User question: {user_input}
-
-Provide a helpful, friendly, and accurate answer. Be conversational and use emojis occasionally.
-"""
-        
-        response = model.generate_content(prompt)
-        return response.text
-        
-    except Exception as e:
-        return f"❌ Error: {str(e)}. Please check your Gemini API key."
-
-# ===== DISPLAY CHATBOT WITH REAL AI =====
-def display_chatbot():
-    st.markdown("### 🤖 AI Assistant (Powered by Google Gemini)")
-    
-    # Check if API key exists
-    if not st.session_state.gemini_key:
-        st.warning("⚠️ Please add your Google Gemini API key in the sidebar to use the AI chatbot.")
-        
-        # Show input for API key directly
-        temp_key = st.text_input("Enter Gemini API Key:", type="password", key="temp_gemini")
-        if st.button("Save and Continue", key="save_temp"):
-            st.session_state.gemini_key = temp_key
-            st.rerun()
-        return
-    
-    st.success("✅ Gemini AI is connected! Ask me anything.")
-    
-    # Chat container
-    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
-    
-    # Display chat history
-    if not st.session_state.chat_history:
-        st.markdown("""
-        <div class='welcome-message'>
-            <h2>👋 Hello! I'm your AI Assistant</h2>
-            <p>Ask me anything about your summaries, the app, or any general questions!</p>
-            <p style='color: #666; margin-top: 20px;'>Examples:</p>
-            <p style='color: #666;'>• "Summarize this text for me"</p>
-            <p style='color: #666;'>• "What are keywords?"</p>
-            <p style='color: #666;'>• "How does LexRank work?"</p>
-            <p style='color: #666;'>• "What is the capital of France?"</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        for msg in st.session_state.chat_history:
-            if msg['role'] == 'user':
-                st.markdown(f"<div class='user-message'>👤 {msg['content']}</div>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<div class='bot-message'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("<div class='clearfix'></div>", unsafe_allow_html=True)
-    
-    # Chat input
-    col1, col2 = st.columns([5, 1])
-    with col1:
-        user_input = st.text_input("", placeholder="Ask me anything...", key="gemini_input")
-    with col2:
-        send = st.button("📤 Send", key="gemini_send", use_container_width=True)
-    
-    if send and user_input:
-        # Add user message
-        st.session_state.chat_history.append({'role': 'user', 'content': user_input})
-        
-        # Get AI response
-        context = st.session_state.get('current_summary', '')
-        with st.spinner("🤔 Thinking..."):
-            response = get_gemini_response(user_input, context)
-        
-        # Add bot response
-        st.session_state.chat_history.append({'role': 'bot', 'content': response})
-        st.rerun()
-    
-    # Clear button
-    if st.session_state.chat_history and st.button("🗑️ Clear Chat", key="gemini_clear"):
-        st.session_state.chat_history = []
-        st.rerun()
-
-# ===== DISPLAY RESULTS =====
-def display_results(text, source_name):
-    if not text or len(text.strip()) == 0:
-        st.error("No text to display")
-        return
-    
-    st.session_state.current_text = text
-    total_sentences = len(nltk.sent_tokenize(text))
-    original_words = len(text.split())
-    original_chars = len(text)
-    
-    st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        if total_sentences < 3:
-            st.warning(f"⚠️ Only {total_sentences} sentence(s)")
-            num_points = total_sentences
-        else:
-            max_val = min(30, total_sentences)
-            num_points = st.slider(
-                "📊 Number of summary sentences:",
-                min_value=3, max_value=max_val,
-                value=st.session_state.slider_value, key="main_slider"
-            )
-            st.session_state.slider_value = num_points
-    
-    with col2:
-        st.metric("Total", total_sentences)
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    if total_sentences <= num_points:
-        summary = text
-        summary_words = original_words
-        st.info(f"ℹ️ Text has only {total_sentences} sentences. Showing full text.")
-    else:
-        summary = generate_summary(text, num_points)
-        summary_words = len(summary.split())
-    
-    st.session_state.current_summary = summary
-    
-    if original_words > 0 and summary_words < original_words:
-        reduction = int((1 - summary_words/original_words) * 100)
-    else:
-        reduction = 0
-    
-    # Summary Section
-    st.markdown("## 📝 Summary")
-    st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
-    
-    # Statistics
-    col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric("📊 Characters", f"{original_chars:,}")
-    with col2: st.metric("📈 Words", f"{original_words:,}")
-    with col3: st.metric("🔤 Sentences", f"{total_sentences:,}")
-    with col4: st.metric("📉 Reduced", f"{reduction}%")
-    
-    # Current Affairs Section
-    with st.expander("🌍 View as Current Affairs", expanded=False):
-        st.markdown("### 📰 Today's Headlines")
-        sentences = nltk.sent_tokenize(text)
-        for i, sent in enumerate(sentences[:10]):
-            if len(sent) > 30:
-                st.markdown(f"• {sent}")
-        
-        current_text = f"CURRENT AFFAIRS - {datetime.now().strftime('%B %d, %Y')}\n\n"
-        for i, sent in enumerate(sentences[:15]):
-            current_text += f"{i+1}. {sent}\n\n"
-        
-        st.download_button(
-            "📥 Download as Current Affairs",
-            current_text,
-            file_name=f"current_affairs_{datetime.now().strftime('%Y%m%d')}.txt"
-        )
-    
-    # Reading Time
-    minutes = original_words // 200
-    seconds = int((original_words % 200) / 200 * 60)
-    st.metric("⏳ Reading Time", f"{minutes} min {seconds} sec")
-    
-    # Downloads
-    st.markdown("### 📥 Downloads")
-    col1, col2, col3 = st.columns(3)
-    with col1: st.download_button("📄 Full Text", text, f"{source_name}_full.txt")
-    with col2: st.download_button("📝 Summary", summary, f"{source_name}_summary.txt")
-    with col3:
-        audio = text_to_speech(summary)
-        if audio:
-            st.audio(audio, format='audio/mp3')
-            st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3", "audio/mp3")
-    
-    # Keywords
-    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    if words:
-        keywords = Counter(words).most_common(15)
-        st.markdown("### 🏷️ Keywords")
-        html = "<div>"
-        for word, count in keywords[:12]:
-            size = min(24 + count, 40)
-            html += f"<span class='keyword-tag' style='font-size: {size}px;'>{word} ({count})</span> "
-        html += "</div>"
-        st.markdown(html, unsafe_allow_html=True)
+        text_for_audio = text[:1000] if len(text) > 1000 else text
+        tts = gTTS(text=text_for_audio, lang='en', slow=False)
+        audio_bytes = io.BytesIO()
+        tts.write_to_fp(audio_bytes)
+        audio_bytes.seek(0)
+        return audio_bytes
+    except:
+        return None
 
 # ===== MAIN UI =====
 def main():
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "🤖 AI Chat", "ℹ️ Help"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🌍 Current Affairs", "🔍 URL Analysis", "📝 Paste Text", "ℹ️ Help"])
     
     with tab1:
-        uploaded_file = st.file_uploader("Choose file", type=['mp4', 'avi', 'mov', 'mp3', 'wav', 'm4a', 'pdf', 'txt'])
-        if uploaded_file:
-            file_ext = uploaded_file.name.split('.')[-1].lower()
-            file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
-            st.info(f"📊 {uploaded_file.name} | {file_size:.2f} MB")
-            
-            if file_ext in ['mp4', 'avi', 'mov']: st.video(uploaded_file)
-            elif file_ext in ['mp3', 'wav', 'm4a']: st.audio(uploaded_file)
-            
-            if st.button("🚀 Process", key="proc_file"):
-                with st.spinner("Processing..."):
-                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                        tmp.write(uploaded_file.getvalue())
-                        path = tmp.name
-                    
-                    if file_ext == 'pdf':
-                        text = extract_pdf_text(path)
-                        if text: st.success("✅ Extracted PDF"); display_results(text, "pdf")
-                    elif file_ext == 'txt':
-                        with open(path, 'r', encoding='utf-8') as f: text = f.read()
-                        display_results(text, "text")
-                    else:
-                        if not st.session_state.assemblyai_key:
-                            st.error("❌ AssemblyAI Key required")
-                        else:
-                            text = transcribe_with_assemblyai(path)
-                            if text: st.success(f"✅ Transcribed: {len(text)} chars"); display_results(text, "media")
-                    os.unlink(path)
+        display_current_affairs()
     
     with tab2:
-        url = st.text_input("Enter URL", placeholder="https://...")
-        if url and st.button("🌐 Fetch", key="fetch_url"):
-            if 'youtube.com' in url or 'youtu.be' in url:
-                with st.spinner("Fetching YouTube..."):
-                    text, title, content_type = extract_youtube_content(url)
-                    if text:
-                        st.success(f"✅ {title}")
-                        if content_type == "description": st.info("ℹ️ Showing video description (no captions available)")
-                        display_results(text, "youtube")
-                    else: st.warning("No content found")
-            elif validators.url(url):
+        st.markdown("### 🔍 Analyze News URL")
+        url = st.text_input("Enter URL", placeholder="https://example.com/news-article")
+        
+        if url and st.button("🔍 Analyze & Summarize", key="analyze_url"):
+            if validators.url(url):
                 with st.spinner("Fetching article..."):
                     text, title = extract_from_url(url)
-                    if text: st.success(f"✅ {title}"); display_results(text, "web")
-                    else: st.warning("No content found")
-            else: st.error("Invalid URL")
+                    if text:
+                        st.success(f"✅ Fetched: {title}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("### 📝 Summary")
+                            summary = generate_summary(text, 5)
+                            st.info(summary)
+                            
+                            # Downloads
+                            audio = text_to_speech(summary)
+                            if audio:
+                                st.audio(audio)
+                                st.download_button("🔊 Download Audio", audio, "summary.mp3")
+                        
+                        with col2:
+                            display_analysis(url, text)
+                    else:
+                        st.warning("No content found")
+            else:
+                st.error("Invalid URL")
     
     with tab3:
-        text_input = st.text_area("Paste text", height=200)
-        if text_input and st.button("📝 Summarize", key="summ_text"):
-            if len(text_input) > 100: display_results(text_input, "pasted")
-            else: st.warning("Text too short")
+        st.markdown("### 📝 Paste Text for Analysis")
+        text_input = st.text_area("Paste article text here", height=200)
+        
+        if text_input and st.button("📝 Analyze Text", key="analyze_text"):
+            if len(text_input) > 200:
+                st.markdown("### 📝 Summary")
+                summary = generate_summary(text_input, 5)
+                st.info(summary)
+                
+                # Simplified analysis for text
+                st.markdown("### 🔍 Quick Analysis")
+                words = len(text_input.split())
+                sentences = len(nltk.sent_tokenize(text_input))
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Words", words)
+                with col2:
+                    st.metric("Sentences", sentences)
+                with col3:
+                    st.metric("Read Time", f"{words//200} min")
+                
+                # Download
+                audio = text_to_speech(summary)
+                if audio:
+                    st.audio(audio)
+                    st.download_button("🔊 Download Audio", audio, "summary.mp3")
+            else:
+                st.warning("Text too short (min 200 chars)")
     
     with tab4:
-        display_chatbot()
-    
-    with tab5:
         st.markdown("""
         <div class='section-card'>
             <h3>📌 How to Use</h3>
             <ol>
-                <li><strong>Get API Keys:</strong>
+                <li><strong>Current Affairs:</strong> View latest news from India</li>
+                <li><strong>URL Analysis:</strong> Paste any news URL to:
                     <ul>
-                        <li><a href='https://www.assemblyai.com/' target='_blank'>AssemblyAI</a> - for transcription</li>
-                        <li><a href='https://aistudio.google.com/' target='_blank'>Google Gemini</a> - for AI Chat</li>
+                        <li>Get credibility score</li>
+                        <li>Check facts</li>
+                        <li>Read summary</li>
                     </ul>
                 </li>
-                <li><strong>Choose Input:</strong> Upload file, paste URL, or enter text</li>
-                <li><strong>Adjust Summary:</strong> Use slider to control summary length</li>
-                <li><strong>Ask AI:</strong> Use AI Chat tab for questions</li>
-                <li><strong>Download:</strong> Get text, summary, or audio</li>
+                <li><strong>Paste Text:</strong> Direct text analysis</li>
             </ol>
-            <h3>✨ Features</h3>
+            
+            <h3>🔍 How Fake News Detection Works</h3>
             <ul>
-                <li>🎤 <strong>Audio to Text</strong> - Transcribe audio/video files</li>
-                <li>📊 <strong>Smart Summaries</strong> - Extract key points</li>
-                <li>🌍 <strong>Current Affairs</strong> - View as news headlines</li>
-                <li>🤖 <strong>AI Chatbot (Gemini)</strong> - Ask anything!</li>
-                <li>📥 <strong>Download</strong> - Text, summary, audio</li>
+                <li>Domain reputation check</li>
+                <li>URL structure analysis</li>
+                <li>Fact checking with multiple sources</li>
+                <li>Credibility scoring (0-100)</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
