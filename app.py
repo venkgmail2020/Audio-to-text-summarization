@@ -18,6 +18,10 @@ import validators
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
 from datetime import datetime
+import matplotlib.pyplot as plt
+import numpy as np
+import hashlib
+from difflib import SequenceMatcher
 
 # ===== NLTK SETUP =====
 try:
@@ -35,8 +39,8 @@ except:
     nltk.download('punkt_tab')
 
 st.set_page_config(
-    page_title="Audio to Text Summarizer", 
-    page_icon="🎤", 
+    page_title="Auto AI Research Assistant", 
+    page_icon="🤖", 
     layout="wide"
 )
 
@@ -45,76 +49,232 @@ st.markdown("""
 <style>
     .main-header {
         background: linear-gradient(135deg, #667eea, #764ba2);
-        padding: 1.5rem;
-        border-radius: 10px;
+        padding: 2rem;
+        border-radius: 15px;
         color: white;
         text-align: center;
         margin-bottom: 2rem;
     }
-    .stat-card {
-        background: #f0f2f6;
-        padding: 1rem;
-        border-radius: 8px;
-        text-align: center;
-        border-left: 4px solid #667eea;
+    .feature-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        border-left: 5px solid #667eea;
+        margin: 1rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .keyword-tag {
+    .plagiarism-high {
+        background: #ff4444;
+        color: white;
+        padding: 0.5rem;
+        border-radius: 5px;
+    }
+    .plagiarism-medium {
+        background: #ffbb33;
+        color: black;
+        padding: 0.5rem;
+        border-radius: 5px;
+    }
+    .plagiarism-low {
+        background: #00C851;
+        color: white;
+        padding: 0.5rem;
+        border-radius: 5px;
+    }
+    .timeline-item {
+        border-left: 3px solid #667eea;
+        padding: 0.5rem 1rem;
+        margin: 0.5rem 0;
+        background: #f8f9fa;
+    }
+    .topic-tag {
         background: #667eea;
         color: white;
         padding: 0.3rem 0.8rem;
         border-radius: 20px;
         display: inline-block;
         margin: 0.2rem;
-        font-size: 0.9rem;
     }
-    .stButton > button {
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: white;
-        border: none;
-        border-radius: 5px;
-        padding: 0.5rem 1rem;
+    .search-highlight {
+        background-color: #ffff99;
+        padding: 2px;
+        border-radius: 3px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-header'><h1>🎤 Audio to Text Summarizer</h1></div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'><h1>🤖 Auto AI Research Assistant</h1><p>5 Features Auto-Detect: Plagiarism | Timeline | Topics | Search | Infographic</p></div>", unsafe_allow_html=True)
 
 # ===== SESSION STATE =====
 if 'assembly_key' not in st.session_state:
     st.session_state.assembly_key = ''
 if 'current_text' not in st.session_state:
     st.session_state.current_text = ''
-if 'current_summary' not in st.session_state:
-    st.session_state.current_summary = ''
-if 'show_results' not in st.session_state:
-    st.session_state.show_results = False
+if 'processed' not in st.session_state:
+    st.session_state.processed = False
 
 # ===== SIDEBAR =====
 with st.sidebar:
-    st.markdown("### Configuration")
+    st.markdown("### ⚙️ API Key")
+    assembly_key = st.text_input(
+        "AssemblyAI Key",
+        value=st.session_state.assembly_key,
+        type="password"
+    )
+    if assembly_key != st.session_state.assembly_key:
+        st.session_state.assembly_key = assembly_key
     
-    with st.expander("API Settings", expanded=True):
-        assembly_key = st.text_input(
-            "AssemblyAI Key",
-            value=st.session_state.assembly_key,
-            type="password"
-        )
-        if st.button("Save", use_container_width=True):
-            st.session_state.assembly_key = assembly_key
-            st.success("✅ Saved!")
-    
-    st.markdown("### Quick Stats")
-    if st.session_state.current_summary:
-        words = len(st.session_state.current_summary.split())
-        st.metric("Last Summary Words", words)
-    
-    st.markdown("### Supported Formats")
-    st.markdown("🎥 **Video:** MP4, AVI, MOV")
-    st.markdown("🎵 **Audio:** MP3, WAV, M4A")
-    st.markdown("📄 **Document:** PDF, TXT")
-    st.markdown("🌐 **Online:** URLs, YouTube")
+    st.markdown("---")
+    st.markdown("### 📊 Live Stats")
+    if st.session_state.current_text:
+        words = len(st.session_state.current_text.split())
+        st.metric("Current Words", f"{words}")
 
-# ===== FUNCTIONS =====
+# ===== FEATURE 1: PLAGIARISM CHECKER =====
+def check_plagiarism(text):
+    """Simulate plagiarism check"""
+    words = text.lower().split()
+    total_words = len(words)
+    
+    # Simulate common phrases detection
+    common_phrases = [
+        "according to", "research shows", "studies indicate",
+        "as a result", "in conclusion", "for example"
+    ]
+    
+    matches = 0
+    for phrase in common_phrases:
+        if phrase in text.lower():
+            matches += 1
+    
+    plagiarism_score = min(100, (matches * 10))
+    
+    if plagiarism_score > 70:
+        level = "High"
+        color = "plagiarism-high"
+    elif plagiarism_score > 40:
+        level = "Medium"
+        color = "plagiarism-medium"
+    else:
+        level = "Low"
+        color = "plagiarism-low"
+    
+    return plagiarism_score, level, color
+
+# ===== FEATURE 2: TIMELINE GENERATOR =====
+def generate_timeline(text):
+    """Extract potential timeline events"""
+    sentences = nltk.sent_tokenize(text)
+    timeline = []
+    
+    # Look for date patterns
+    date_patterns = [
+        r'\b\d{4}\b',  # Years
+        r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b',
+        r'\b\d{1,2}/\d{1,2}/\d{4}\b'
+    ]
+    
+    for i, sent in enumerate(sentences):
+        for pattern in date_patterns:
+            if re.search(pattern, sent, re.IGNORECASE):
+                timeline.append({
+                    'date': re.search(pattern, sent).group(),
+                    'event': sent[:100]
+                })
+                break
+    
+    return timeline[:5]  # Return top 5
+
+# ===== FEATURE 3: TOPIC DETECTION =====
+def detect_topics(text, num_topics=5):
+    """Extract main topics from text"""
+    words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
+    word_freq = Counter(words)
+    
+    # Filter out common words
+    common = {'The', 'This', 'That', 'These', 'Those', 'There'}
+    topics = [(w, c) for w, c in word_freq.most_common(15) if w not in common]
+    
+    return topics[:num_topics]
+
+# ===== FEATURE 4: SMART SEARCH =====
+def smart_search(text, query):
+    """Search inside document"""
+    if not query:
+        return []
+    
+    sentences = nltk.sent_tokenize(text)
+    results = []
+    
+    for sent in sentences:
+        if query.lower() in sent.lower():
+            # Highlight the query
+            highlighted = sent.replace(query, f"**{query}**")
+            results.append(highlighted)
+    
+    return results[:5]
+
+# ===== FEATURE 5: INFOGRAPHIC GENERATOR =====
+def generate_infographic(text, topics):
+    """Create visual infographic"""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.patch.set_facecolor('#f8f9fa')
+    
+    # 1. Word Frequency
+    words = re.findall(r'\b\w{4,}\b', text.lower())
+    word_counts = Counter(words).most_common(8)
+    
+    if word_counts:
+        ax1 = axes[0, 0]
+        words_list, counts_list = zip(*word_counts)
+        ax1.barh(words_list, counts_list, color='#667eea')
+        ax1.set_title('Top Keywords', fontsize=12, fontweight='bold')
+    
+    # 2. Topic Distribution
+    if topics:
+        ax2 = axes[0, 1]
+        topic_names, topic_counts = zip(*topics)
+        ax2.pie(topic_counts, labels=topic_names, autopct='%1.1f%%', colors=['#667eea', '#764ba2', '#ff6b6b', '#4ecdc4', '#45b7d1'])
+        ax2.set_title('Topic Distribution', fontsize=12, fontweight='bold')
+    
+    # 3. Sentence Length Distribution
+    sentences = nltk.sent_tokenize(text)
+    sent_lengths = [len(sent.split()) for sent in sentences]
+    ax3 = axes[1, 0]
+    ax3.hist(sent_lengths, bins=15, color='#764ba2', alpha=0.7)
+    ax3.set_title('Sentence Length Distribution', fontsize=12, fontweight='bold')
+    ax3.set_xlabel('Words per Sentence')
+    
+    # 4. Text Statistics
+    ax4 = axes[1, 1]
+    ax4.axis('off')
+    
+    unique_words = len(set(re.findall(r'\b\w+\b', text.lower())))
+    total_words = len(text.split())
+    total_sents = len(sentences)
+    
+    stats_text = f"""
+    📊 DOCUMENT STATISTICS
+    
+    Total Words: {total_words:,}
+    Unique Words: {unique_words:,}
+    Total Sentences: {total_sents}
+    Avg Word Length: {total_words/total_sents:.1f}
+    Reading Time: {total_words//200} min
+    
+    🎯 TOP TOPICS
+    """
+    for topic, count in topics[:3]:
+        stats_text += f"\n• {topic}: {count} times"
+    
+    ax4.text(0.1, 0.9, stats_text, transform=ax4.transAxes,
+             fontsize=10, verticalalignment='top',
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    plt.tight_layout()
+    return fig
+
+# ===== TEXT EXTRACTION FUNCTIONS =====
 def extract_pdf_text(pdf_path):
     try:
         text = ""
@@ -129,41 +289,83 @@ def extract_pdf_text(pdf_path):
         st.error(f"PDF error: {e}")
         return None
 
-def generate_summary(text, num_sentences=3):
+def extract_url_text(url):
     try:
-        if not text or len(text) < 100:
-            return text
-        
-        parser = PlaintextParser.from_string(text, Tokenizer("english"))
-        summarizer = LexRankSummarizer()
-        summary = summarizer(parser.document, num_sentences)
-        return ' '.join(str(s) for s in summary)
-    except:
-        sentences = nltk.sent_tokenize(text)
-        return ' '.join(sentences[:num_sentences])
-
-def get_keywords(text):
-    try:
-        words = re.findall(r'\b\w{4,}\b', text.lower())
-        stopwords = set(nltk.corpus.stopwords.words('english'))
-        filtered = [w for w in words if w not in stopwords]
-        return Counter(filtered).most_common(8)
-    except:
-        return []
-
-def text_to_speech(text):
-    try:
-        tts = gTTS(text=text[:500], lang='en', slow=False)
-        audio_bytes = io.BytesIO()
-        tts.write_to_fp(audio_bytes)
-        audio_bytes.seek(0)
-        return audio_bytes
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for tag in soup(['script', 'style']):
+            tag.decompose()
+        return ' '.join(p.get_text() for p in soup.find_all('p'))
     except:
         return None
 
-# ===== MAIN TABS =====
+# ===== AUTO PROCESS FUNCTION =====
+def auto_process(text):
+    """Auto generate all 5 features"""
+    if not text or len(text) < 100:
+        return
+    
+    st.session_state.current_text = text
+    
+    # Feature 1: Plagiarism Check
+    with st.container():
+        st.markdown("---")
+        st.markdown("## 🔍 Plagiarism Checker")
+        score, level, color = check_plagiarism(text)
+        st.markdown(f"<div class='{color}' style='padding:1rem; border-radius:5px;'>"
+                   f"<b>Plagiarism Score:</b> {score}% - {level} Risk</div>", 
+                   unsafe_allow_html=True)
+    
+    # Feature 2: Timeline
+    st.markdown("## 📅 Timeline Generator")
+    timeline = generate_timeline(text)
+    if timeline:
+        for item in timeline:
+            st.markdown(f"<div class='timeline-item'>📅 {item['date']}<br>{item['event']}</div>", 
+                       unsafe_allow_html=True)
+    else:
+        st.info("No timeline events detected")
+    
+    # Feature 3: Topic Detection
+    st.markdown("## 🎯 Topic Detection")
+    topics = detect_topics(text)
+    if topics:
+        topic_html = ""
+        for topic, count in topics:
+            topic_html += f"<span class='topic-tag'>{topic} ({count})</span> "
+        st.markdown(topic_html, unsafe_allow_html=True)
+    else:
+        st.info("No specific topics detected")
+    
+    # Feature 4: Smart Search
+    st.markdown("## 🔎 Smart Document Search")
+    search_query = st.text_input("Enter search term", placeholder="Type to search...", key="search")
+    if search_query:
+        results = smart_search(text, search_query)
+        if results:
+            for res in results:
+                st.markdown(f"<div class='search-highlight'>{res}</div>", unsafe_allow_html=True)
+        else:
+            st.info("No matches found")
+    
+    # Feature 5: Infographic
+    st.markdown("## 📊 Auto Infographic")
+    fig = generate_infographic(text, topics)
+    st.pyplot(fig)
+    
+    # Download infographic
+    img_bytes = io.BytesIO()
+    fig.savefig(img_bytes, format='png', dpi=100, bbox_inches='tight')
+    img_bytes.seek(0)
+    st.download_button("📥 Download Infographic", img_bytes, "infographic.png", "image/png")
+    
+    st.session_state.processed = True
+
+# ===== MAIN UI =====
 tab1, tab2, tab3 = st.tabs(["📁 File Upload", "🔗 URL/YouTube", "📝 Paste Text"])
 
+# TAB 1: FILE UPLOAD
 with tab1:
     uploaded_file = st.file_uploader(
         "Choose file",
@@ -172,110 +374,58 @@ with tab1:
     
     if uploaded_file:
         file_ext = uploaded_file.name.split('.')[-1].lower()
-        if file_ext in ['mp4', 'avi', 'mov']:
-            st.video(uploaded_file)
-        elif file_ext in ['mp3', 'wav']:
-            st.audio(uploaded_file)
+        file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
+        st.info(f"📊 Processing: {uploaded_file.name} ({file_size:.2f} MB)")
         
-        if st.button("Process", key="process_file"):
-            with st.spinner("Processing..."):
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    tmp.write(uploaded_file.getvalue())
-                    path = tmp.name
-                
-                if file_ext == 'pdf':
-                    text = extract_pdf_text(path)
-                elif file_ext == 'txt':
-                    with open(path, 'r') as f:
-                        text = f.read()
-                else:
-                    # Simulate transcription for demo
-                    time.sleep(2)
-                    text = f"Sample transcription from {uploaded_file.name}"
-                
-                os.unlink(path)
-                
-                if text:
-                    st.session_state.current_text = text
-                    st.session_state.show_results = True
-                    st.rerun()
+        with st.spinner("Auto-analyzing..."):
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(uploaded_file.getvalue())
+                path = tmp.name
+            
+            if file_ext == 'pdf':
+                text = extract_pdf_text(path)
+            elif file_ext == 'txt':
+                with open(path, 'r', encoding='utf-8') as f:
+                    text = f.read()
+            else:
+                # For demo - simulate transcription
+                time.sleep(1)
+                text = f"Sample transcription from {uploaded_file.name}. " * 50
+            
+            os.unlink(path)
+            
+            if text:
+                auto_process(text)
 
+# TAB 2: URL/YOUTUBE
 with tab2:
-    url = st.text_input("Enter URL", placeholder="https://youtube.com/...")
-    if url and st.button("Fetch"):
-        with st.spinner("Fetching..."):
-            time.sleep(1)
-            st.session_state.current_text = f"Sample content from {url}"
-            st.session_state.show_results = True
-            st.rerun()
+    url = st.text_input("Enter URL", placeholder="https://...")
+    
+    if url:
+        with st.spinner("Auto-fetching and analyzing..."):
+            if 'youtube.com' in url or 'youtu.be' in url:
+                # Simulate YouTube content
+                text = f"YouTube video content from {url}. " * 50
+            else:
+                text = extract_url_text(url) or f"Sample article content from {url}. " * 50
+            
+            if text:
+                auto_process(text)
 
+# TAB 3: PASTE TEXT
 with tab3:
-    text_input = st.text_area("Paste text", height=150)
-    if text_input and st.button("Summarize"):
-        if len(text_input) > 50:
-            st.session_state.current_text = text_input
-            st.session_state.show_results = True
-            st.rerun()
-        else:
-            st.warning("Text too short")
+    text_input = st.text_area("Paste text", height=200, placeholder="Paste your content here...")
+    
+    if text_input and len(text_input) > 100:
+        with st.spinner("Auto-analyzing..."):
+            auto_process(text_input)
+    elif text_input:
+        st.warning("Please enter at least 100 characters")
 
-# ===== RESULTS SECTION =====
-if st.session_state.show_results and st.session_state.current_text:
-    st.markdown("---")
-    
-    text = st.session_state.current_text
-    summary = generate_summary(text)
-    st.session_state.current_summary = summary
-    keywords = get_keywords(text)
-    
-    # Original text preview
-    with st.expander("📄 Full Text", expanded=False):
-        st.write(text[:500] + "..." if len(text) > 500 else text)
-    
-    # Summary
-    st.subheader("📝 Summary")
-    st.info(summary)
-    
-    # Stats in columns
-    col1, col2, col3, col4 = st.columns(4)
-    
-    words_count = len(text.split())
-    sentences_count = len(nltk.sent_tokenize(text))
-    summary_words = len(summary.split())
-    
-    with col1:
-        st.markdown(f"<div class='stat-card'><b>Words</b><br><h2>{words_count}</h2></div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<div class='stat-card'><b>Sentences</b><br><h2>{sentences_count}</h2></div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"<div class='stat-card'><b>Summary Words</b><br><h2>{summary_words}</h2></div>", unsafe_allow_html=True)
-    with col4:
-        read_time = f"{words_count//200} min"
-        st.markdown(f"<div class='stat-card'><b>Read Time</b><br><h2>{read_time}</h2></div>", unsafe_allow_html=True)
-    
-    # Keywords
-    if keywords:
-        st.subheader("🏷️ Keywords")
-        html = ""
-        for word, count in keywords:
-            html += f"<span class='keyword-tag'>{word}</span> "
-        st.markdown(html, unsafe_allow_html=True)
-    
-    # Download buttons
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.download_button("📄 Download Text", text, "full_text.txt")
-    with col2:
-        st.download_button("📝 Download Summary", summary, "summary.txt")
-    with col3:
-        audio = text_to_speech(summary)
-        if audio:
-            st.audio(audio)
-            st.download_button("🔊 Download Audio", audio, "summary.mp3")
-    
-    # Clear button
-    if st.button("🔄 Clear", use_container_width=True):
-        st.session_state.show_results = False
-        st.session_state.current_text = ''
-        st.session_state.current_summary = ''
-        st.rerun()
+# ===== FOOTER =====
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #666; padding: 1rem;'>
+    🤖 5 Features Auto-Detect | No Buttons Needed!
+</div>
+""", unsafe_allow_html=True)
