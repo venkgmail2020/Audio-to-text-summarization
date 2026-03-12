@@ -5,6 +5,3 @@ PyPDF2
 gtts
 validators
 beautifulsoup4
-yt-dlp
-youtube-transcript-api
-google-generativeai
