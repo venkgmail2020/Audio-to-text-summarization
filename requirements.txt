@@ -7,5 +7,7 @@ validators
 beautifulsoup4
 yt-dlp
 youtube-transcript-api
-edge-tts
 sumy
+pandas
+matplotlib
+numpy
