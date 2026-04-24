@@ -106,29 +106,44 @@ if 'current_summary' not in st.session_state:
 if 'slider_value' not in st.session_state:
     st.session_state.slider_value = 5
 
-# ===== SIDEBAR =====
-with st.sidebar:
-    st.markdown("### 🔑 API Configuration")
-    assembly_key = st.text_input(
-        "AssemblyAI Key",
-        value=st.session_state.assemblyai_key,
-        type="password"
-    )
-    if st.button("💾 Save Keys", use_container_width=True):
-        st.session_state.assemblyai_key = assembly_key
-        st.success("✅ Keys saved!")
-    
-    st.markdown("---")
-    st.markdown("### 📌 Supported")
-    st.markdown("🎥 Video: MP4, AVI, MOV")
-    st.markdown("🎵 Audio: MP3, WAV, M4A")
-    st.markdown("📄 PDF, TXT")
-    st.markdown("🖼️ Images: JPG, PNG, JPEG, BMP")
-    st.markdown("🌐 URLs")
-    st.markdown("▶️ YouTube")
+# ===== OCR FUNCTION (STREAMLIT CLOUD COMPATIBLE) =====
+def extract_text_from_image(image_path):
+    """Extract text from image using pytesseract - Streamlit Cloud Ready"""
+    try:
+        # Try multiple possible tesseract paths for Streamlit Cloud
+        possible_paths = [
+            '/usr/bin/tesseract',
+            '/app/.apt/usr/bin/tesseract',
+            '/app/vendor/tesseract/tesseract'
+        ]
+        
+        tesseract_found = False
+        for path in possible_paths:
+            if os.path.exists(path):
+                pytesseract.pytesseract.tesseract_cmd = path
+                tesseract_found = True
+                break
+        
+        # If still not found, try default (might work in some environments)
+        if not tesseract_found:
+            # Check if tesseract is in PATH
+            import subprocess
+            try:
+                subprocess.run(['tesseract', '--version'], capture_output=True)
+                # If above works, it's in PATH
+                pass
+            except:
+                st.error("Tesseract OCR not found. Please check packages.txt")
+                return None
+        
+        img = Image.open(image_path)
+        text = pytesseract.image_to_string(img)
+        return text.strip() if text else None
+    except Exception as e:
+        st.error(f"OCR failed: {str(e)}")
+        return None
 
-# ==================== UTILITY FUNCTIONS ====================
-
+# ==================== ALL OTHER FUNCTIONS ====================
 def extract_pdf_text(pdf_path):
     try:
         text = ""
@@ -264,20 +279,6 @@ def generate_summary(text, num_points):
         summary += f"{i}. {sentences[idx]}\n\n"
     return summary
 
-def extract_text_from_image(image_path):
-    """
-    Extract text from image using pytesseract (OCR)
-    No OpenCV required - works on Streamlit Cloud
-    """
-    try:
-        img = Image.open(image_path)
-        # Simple OCR - directly extract text
-        text = pytesseract.image_to_string(img)
-        return text.strip()
-    except Exception as e:
-        st.error(f"OCR failed: {str(e)}")
-        return None
-
 def display_results(text, source_name):
     if not text or len(text.strip()) == 0:
         st.error("No text to display")
@@ -289,7 +290,7 @@ def display_results(text, source_name):
     original_words = len(text.split())
     original_chars = len(text)
     
-    # ===== SLIDER =====
+    # Slider
     st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -298,19 +299,13 @@ def display_results(text, source_name):
             num_points = total_sentences
         else:
             max_val = min(30, total_sentences)
-            num_points = st.slider(
-                "Number of summary sentences:",
-                min_value=3,
-                max_value=max_val,
-                value=st.session_state.slider_value,
-                key="main_slider"
-            )
+            num_points = st.slider("Number of summary sentences:", 3, max_val, st.session_state.slider_value, key="main_slider")
             st.session_state.slider_value = num_points
     with col2:
         st.metric("Total", total_sentences)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # ===== SUMMARY =====
+    # Generate summary
     if total_sentences < 3:
         summary = text
         summary_words = original_words
@@ -320,7 +315,7 @@ def display_results(text, source_name):
     
     st.session_state.current_summary = summary
     
-    if original_words > 0 and summary_words < original_words:
+    if original_words > 0:
         reduction = int((1 - summary_words/original_words) * 100)
         reduction = max(0, min(100, reduction))
     else:
@@ -329,7 +324,7 @@ def display_results(text, source_name):
     st.markdown("## 📋 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    # ===== STATISTICS =====
+    # Statistics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Characters", f"{original_chars:,}")
@@ -340,7 +335,7 @@ def display_results(text, source_name):
     with col4:
         st.metric("Reduced", f"{reduction}%")
     
-    # ===== DOWNLOADS =====
+    # Downloads
     st.markdown("### 📥 Downloads")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -353,7 +348,7 @@ def display_results(text, source_name):
             st.audio(audio)
             st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3")
     
-    # ===== KEYWORDS =====
+    # Keywords
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
     if words:
         keywords = Counter(words).most_common(10)
@@ -364,12 +359,10 @@ def display_results(text, source_name):
         html += "</div>"
         st.markdown(html, unsafe_allow_html=True)
 
-
 # ==================== MAIN UI ====================
 def main():
     tab1, tab2, tab3, tab4 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "ℹ️ Help"])
     
-    # ********** TAB 1: FILE UPLOAD **********
     with tab1:
         uploaded_file = st.file_uploader(
             "Choose file",
@@ -381,7 +374,6 @@ def main():
             file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
             st.info(f"📊 {uploaded_file.name} | {file_size:.2f} MB")
             
-            # Preview for media
             if file_ext in ['mp4', 'avi', 'mov']:
                 st.video(uploaded_file)
             elif file_ext in ['mp3', 'wav', 'm4a']:
@@ -422,10 +414,8 @@ def main():
                                 display_results(text, "media")
                     os.unlink(path)
     
-    # ********** TAB 2: URL/YOUTUBE **********
     with tab2:
         url = st.text_input("Enter URL", placeholder="https://...")
-        
         if url and st.button("🌐 Fetch", key="fetch_url"):
             if 'youtube.com' in url or 'youtu.be' in url:
                 with st.spinner("Fetching YouTube..."):
@@ -446,7 +436,6 @@ def main():
             else:
                 st.error("Invalid URL")
     
-    # ********** TAB 3: PASTE TEXT **********
     with tab3:
         text_input = st.text_area("Paste text", height=200)
         if text_input and st.button("📝 Summarize", key="summ_text"):
@@ -455,7 +444,6 @@ def main():
             else:
                 st.warning("Text too short")
     
-    # ********** TAB 4: HELP **********
     with tab4:
         st.markdown("""
         <div class='section-card'>
@@ -465,14 +453,17 @@ def main():
                 <li>Upload file or paste URL</li>
                 <li>Adjust slider for summary length</li>
                 <li>Download text/summary/audio</li>
-                <li><strong>New! Now supports images (JPG, PNG, JPEG, BMP)</strong></li>
+                <li><strong>Now supports images (JPG, PNG, JPEG, BMP) via OCR</strong></li>
             </ol>
-            <h3>✅ FIXED & ENHANCED</h3>
+            <h3>✅ Features</h3>
             <ul>
-                <li>✅ URL upload shows correct reduction % (word count based)</li>
-                <li>✅ Video upload respects slider value</li>
-                <li>✅ Image upload & OCR with pytesseract (No OpenCV needed)</li>
-                <li>✅ All input types work same way</li>
+                <li>✅ Video/Audio transcription</li>
+                <li>✅ PDF/Text extraction</li>
+                <li>✅ URL/YouTube fetching</li>
+                <li>✅ Image OCR (No OpenCV required)</li>
+                <li>✅ Smart summarization with LexRank</li>
+                <li>✅ Keyword extraction</li>
+                <li>✅ Text-to-speech audio download</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
