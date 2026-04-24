@@ -10,3 +10,5 @@ youtube-transcript-api
 sumy
 pillow
 pytesseract
+tesseract-ocr
+tesseract-ocr-eng
