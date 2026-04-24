@@ -9,29 +9,21 @@ import re
 from collections import Counter
 from gtts import gTTS
 import io
-import base64
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import ssl
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse
 import validators
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
 from PIL import Image
 import pytesseract
-import cv2
-import numpy as np
-
-# ===== TESSERACT PATH (Windows) =====
-# If you installed Tesseract in default location, uncomment below line
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # ===== NLTK SETUP =====
 try:
     _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
+except:
     pass
 else:
     ssl._create_default_https_context = _create_unverified_https_context
@@ -43,7 +35,6 @@ except:
     nltk.download('punkt')
     nltk.download('stopwords')
     nltk.download('punkt_tab')
-
 
 st.set_page_config(page_title="Text Summarizer Using NLP", page_icon="📝", layout="wide")
 
@@ -274,13 +265,14 @@ def generate_summary(text, num_points):
     return summary
 
 def extract_text_from_image(image_path):
+    """
+    Extract text from image using pytesseract (OCR)
+    No OpenCV required - works on Streamlit Cloud
+    """
     try:
-        # Load image and extract text using Tesseract
-        image = cv2.imread(image_path)
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        # Apply threshold to get better result
-        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-        text = pytesseract.image_to_string(thresh)
+        img = Image.open(image_path)
+        # Simple OCR - directly extract text
+        text = pytesseract.image_to_string(img)
         return text.strip()
     except Exception as e:
         st.error(f"OCR failed: {str(e)}")
@@ -306,7 +298,13 @@ def display_results(text, source_name):
             num_points = total_sentences
         else:
             max_val = min(30, total_sentences)
-            num_points = st.slider("Number of summary sentences:", 3, max_val, st.session_state.slider_value, key="main_slider")
+            num_points = st.slider(
+                "Number of summary sentences:",
+                min_value=3,
+                max_value=max_val,
+                value=st.session_state.slider_value,
+                key="main_slider"
+            )
             st.session_state.slider_value = num_points
     with col2:
         st.metric("Total", total_sentences)
@@ -322,7 +320,7 @@ def display_results(text, source_name):
     
     st.session_state.current_summary = summary
     
-    if original_words > 0:
+    if original_words > 0 and summary_words < original_words:
         reduction = int((1 - summary_words/original_words) * 100)
         reduction = max(0, min(100, reduction))
     else:
@@ -467,13 +465,13 @@ def main():
                 <li>Upload file or paste URL</li>
                 <li>Adjust slider for summary length</li>
                 <li>Download text/summary/audio</li>
-                <li><strong>New! Now supports images (JPG, PNG, JPEG, BMP) via OCR</strong></li>
+                <li><strong>New! Now supports images (JPG, PNG, JPEG, BMP)</strong></li>
             </ol>
             <h3>✅ FIXED & ENHANCED</h3>
             <ul>
                 <li>✅ URL upload shows correct reduction % (word count based)</li>
                 <li>✅ Video upload respects slider value</li>
-                <li>✅ Image upload & OCR to extract text</li>
+                <li>✅ Image upload & OCR with pytesseract (No OpenCV needed)</li>
                 <li>✅ All input types work same way</li>
             </ul>
         </div>
