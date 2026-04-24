@@ -9,234 +9,122 @@ import re
 from collections import Counter
 from gtts import gTTS
 import io
+import base64
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
 import ssl
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 import validators
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
+from PIL import Image
+import pytesseract
+import cv2
+import numpy as np
+
+# ===== TESSERACT PATH (Windows) =====
+# If you installed Tesseract in default location, uncomment below line
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # ===== NLTK SETUP =====
 try:
     _create_unverified_https_context = ssl._create_unverified_context
-except:
+except AttributeError:
     pass
 else:
     ssl._create_default_https_context = _create_unverified_https_context
 
 try:
     nltk.data.find('tokenizers/punkt')
+    nltk.data.find('corpora/stopwords')
 except:
     nltk.download('punkt')
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-st.set_page_config(
-    page_title="Audio to Text Summarizer", 
-    page_icon="🎤", 
-    layout="wide"
-)
 
-# ===== CUSTOM CSS - GOLD THEME =====
+st.set_page_config(page_title="Text Summarizer Using NLP", page_icon="📝", layout="wide")
+
+# ===== CUSTOM CSS =====
 st.markdown("""
 <style>
-    /* Main header - Gold gradient */
     .main-header {
-        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
+        background: linear-gradient(135deg, #667eea, #764ba2);
         padding: 2rem;
-        border-radius: 30px 30px 30px 30px;
+        border-radius: 15px;
         color: white;
         text-align: center;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 20px rgba(255, 94, 58, 0.3);
     }
-    
-    /* Section cards - Rounded, no rectangles */
     .section-card {
-        background: #fff5e6;
+        background: white;
         padding: 1.5rem;
-        border-radius: 25px;
-        border-left: none;
+        border-radius: 10px;
+        border-left: 5px solid #667eea;
         margin: 1rem 0;
-        box-shadow: 0 5px 15px rgba(255, 94, 58, 0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
-    /* Keyword tags - Orange */
     .keyword-tag {
-        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
+        background: #667eea;
         color: white;
-        padding: 0.4rem 1rem;
-        border-radius: 50px;
-        display: inline-block;
-        margin: 0.3rem;
-        font-size: 0.9rem;
-        box-shadow: 0 3px 8px rgba(255, 94, 58, 0.2);
-    }
-    
-    /* Feature tags in sidebar */
-    .feature-tag {
-        background: #fff5e6;
-        color: #ff5e3a;
-        padding: 0.5rem 1rem;
-        border-radius: 50px;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
         display: inline-block;
         margin: 0.2rem;
         font-size: 0.9rem;
-        border: 1px solid #ff8c42;
     }
-    
-    /* Buttons - Orange rounded */
-    .stButton > button {
-        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
-        color: white;
-        border: none;
-        padding: 0.6rem 1.5rem;
-        border-radius: 50px;
-        font-weight: bold;
-        width: 100%;
-        transition: all 0.3s ease;
-        box-shadow: 0 5px 15px rgba(255, 94, 58, 0.3);
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 20px rgba(255, 94, 58, 0.4);
-    }
-    
-    /* Tabs - Orange rounded */
-    .stTabs [data-baseweb="tab-list"] {
-        background: #fff5e6;
-        padding: 0.5rem;
-        border-radius: 50px;
-        gap: 0.5rem;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        color: #ff5e3a;
-        border-radius: 50px;
-        padding: 0.5rem 1.5rem;
-        font-weight: 500;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #ff8c42, #ff5e3a);
-        color: white;
-    }
-    
-    /* Slider container */
-    .slider-container {
-        background: #fff5e6;
-        padding: 1.5rem;
-        border-radius: 30px;
-        margin: 1rem 0;
-        border: none;
-    }
-    
-    /* Metric boxes - Rounded */
     .metric-box {
-        background: #fff5e6;
-        padding: 1.2rem;
-        border-radius: 25px;
-        text-align: center;
-        box-shadow: 0 5px 10px rgba(255, 94, 58, 0.1);
-    }
-    
-    /* Sidebar styling */
-    [data-testid="stSidebar"] {
-        background: #fff9f0;
-        padding: 1rem;
-    }
-    
-    [data-testid="stSidebar"] * {
-        color: #ff5e3a;
-    }
-    
-    /* Feature cards in sidebar */
-    .sidebar-feature {
         background: white;
         padding: 1rem;
-        border-radius: 20px;
-        margin: 0.5rem 0;
-        border-left: none;
-        box-shadow: 0 3px 10px rgba(255, 94, 58, 0.1);
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
-    /* Plagiarism indicators - Rounded */
-    .plagiarism-low { 
-        background: #d4edda; 
-        color: #155724; 
-        padding: 0.8rem; 
-        border-radius: 20px; 
-        margin: 0.3rem 0;
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
     }
-    .plagiarism-medium { 
-        background: #fff3cd; 
-        color: #856404; 
-        padding: 0.8rem; 
-        border-radius: 20px; 
-        margin: 0.3rem 0;
+    .stButton > button {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        border-radius: 25px;
+        font-weight: bold;
+        width: 100%;
     }
-    .plagiarism-high { 
-        background: #f8d7da; 
-        color: #721c24; 
-        padding: 0.8rem; 
-        border-radius: 20px; 
-        margin: 0.3rem 0;
-    }
-    
-    /* Timeline items - Rounded */
-    .timeline-item { 
-        background: #fff5e6; 
-        padding: 0.8rem 1.2rem; 
-        border-radius: 20px; 
-        margin: 0.5rem 0; 
-        border-left: none;
-    }
-    
-    /* Timestamp items - Rounded */
-    .timestamp-item { 
-        background: #fff5e6; 
-        padding: 0.6rem 1rem; 
-        border-radius: 15px; 
-        margin: 0.3rem 0; 
-    }
-    
-    /* Moment highlight - Rounded */
-    .moment-highlight { 
-        background: #fff3cd; 
-        padding: 0.6rem 1rem; 
-        border-radius: 15px; 
-        margin: 0.3rem 0; 
-        border-left: none;
+    .slider-container {
+        background: #f0f2f6;
+        padding: 1rem;
+        border-radius: 10px;
+        margin: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ===== HEADER - Orange =====
-st.markdown("<div class='main-header'><h1>🎤 Audio to Text Summarizer</h1><p>Transform your audio, video, PDF, and text into smart summaries</p></div>", unsafe_allow_html=True)
+st.markdown("<div class='main-header'><h1>📝 Text Summarizer Using NLP</h1><p>Video | Audio | PDF | Image | Text | URL | YouTube</p></div>", unsafe_allow_html=True)
 
 # ===== SESSION STATE =====
-if 'assembly_key' not in st.session_state:
-    st.session_state.assembly_key = ''
+if 'assemblyai_key' not in st.session_state:
+    st.session_state.assemblyai_key = ''
 if 'current_text' not in st.session_state:
     st.session_state.current_text = ''
+if 'current_summary' not in st.session_state:
+    st.session_state.current_summary = ''
 if 'slider_value' not in st.session_state:
     st.session_state.slider_value = 5
 
 # ===== SIDEBAR =====
 with st.sidebar:
     st.markdown("### 🔑 API Configuration")
-    
     assembly_key = st.text_input(
         "AssemblyAI Key",
-        value=st.session_state.assembly_key,
+        value=st.session_state.assemblyai_key,
         type="password"
     )
-    
     if st.button("💾 Save Keys", use_container_width=True):
-        st.session_state.assembly_key = assembly_key
+        st.session_state.assemblyai_key = assembly_key
         st.success("✅ Keys saved!")
     
     st.markdown("---")
@@ -244,28 +132,12 @@ with st.sidebar:
     st.markdown("🎥 Video: MP4, AVI, MOV")
     st.markdown("🎵 Audio: MP3, WAV, M4A")
     st.markdown("📄 PDF, TXT")
-    st.markdown("🌐 URLs, YouTube")
-    
-    # ===== 5 FEATURES IN SIDEBAR =====
-    st.markdown("---")
-    st.markdown("### 🚀 5 Features")
-    
-    with st.expander("🔍 Plagiarism Checker", expanded=True):
-        st.markdown("<div class='sidebar-feature'>Check text originality</div>", unsafe_allow_html=True)
-    
-    with st.expander("📅 Timeline Generator", expanded=True):
-        st.markdown("<div class='sidebar-feature'>Convert to timeline</div>", unsafe_allow_html=True)
-    
-    with st.expander("🎯 Topic Detection", expanded=True):
-        st.markdown("<div class='sidebar-feature'>Identify main topics</div>", unsafe_allow_html=True)
-    
-    with st.expander("⏱️ Timestamp Summary", expanded=True):
-        st.markdown("<div class='sidebar-feature'>Time-wise summary</div>", unsafe_allow_html=True)
-    
-    with st.expander("🎬 Key Moments", expanded=True):
-        st.markdown("<div class='sidebar-feature'>Important moments</div>", unsafe_allow_html=True)
+    st.markdown("🖼️ Images: JPG, PNG, JPEG, BMP")
+    st.markdown("🌐 URLs")
+    st.markdown("▶️ YouTube")
 
-# ===== ORIGINAL FUNCTIONS =====
+# ==================== UTILITY FUNCTIONS ====================
+
 def extract_pdf_text(pdf_path):
     try:
         text = ""
@@ -401,55 +273,19 @@ def generate_summary(text, num_points):
         summary += f"{i}. {sentences[idx]}\n\n"
     return summary
 
-# ===== 5 FEATURES FUNCTIONS =====
-def check_plagiarism(text):
-    common_phrases = ["according to", "research shows", "studies indicate", "as a result", 
-                      "in conclusion", "for example", "such as", "due to"]
-    matches = sum(1 for phrase in common_phrases if phrase in text.lower())
-    score = min(100, matches * 12)
-    if score < 30: return score, "Low", "plagiarism-low"
-    elif score < 60: return score, "Medium", "plagiarism-medium"
-    else: return score, "High", "plagiarism-high"
+def extract_text_from_image(image_path):
+    try:
+        # Load image and extract text using Tesseract
+        image = cv2.imread(image_path)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Apply threshold to get better result
+        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+        text = pytesseract.image_to_string(thresh)
+        return text.strip()
+    except Exception as e:
+        st.error(f"OCR failed: {str(e)}")
+        return None
 
-def generate_timeline(text):
-    sentences = nltk.sent_tokenize(text)
-    timeline = []
-    year_pattern = r'\b(19|20)\d{2}\b'
-    for sent in sentences[:15]:
-        years = re.findall(year_pattern, sent)
-        if years:
-            timeline.append(f"📅 {years[0]} → {sent[:80]}...")
-    return timeline[:5]
-
-def detect_topics(text):
-    words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
-    word_freq = Counter(words)
-    common = {'The', 'This', 'That', 'These', 'Those'}
-    return [(w, c) for w, c in word_freq.most_common(8) if w not in common and len(w) > 3]
-
-def generate_timestamps(text, duration=10):
-    sentences = nltk.sent_tokenize(text)
-    timestamps = []
-    interval = duration / min(8, len(sentences))
-    for i in range(min(8, len(sentences))):
-        mins = int(i * interval)
-        secs = int((i * interval - mins) * 60)
-        timestamps.append(f"⏱️ {mins:02d}:{secs:02d} → {sentences[i][:70]}...")
-    return timestamps
-
-def detect_key_moments(text):
-    sentences = nltk.sent_tokenize(text)
-    keywords = ['important', 'key', 'significant', 'crucial', 'vital', 'breakthrough']
-    moments = []
-    for i, sent in enumerate(sentences[:20]):
-        score = sum(1 for k in keywords if k in sent.lower())
-        if score > 0:
-            mins = (i * 10) // 60
-            secs = (i * 10) % 60
-            moments.append(f"✨ {mins:02d}:{secs:02d} - {sent[:80]}...")
-    return moments[:5]
-
-# ===== DISPLAY RESULTS =====
 def display_results(text, source_name):
     if not text or len(text.strip()) == 0:
         st.error("No text to display")
@@ -461,7 +297,7 @@ def display_results(text, source_name):
     original_words = len(text.split())
     original_chars = len(text)
     
-    # Slider
+    # ===== SLIDER =====
     st.markdown("<div class='slider-container'>", unsafe_allow_html=True)
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -476,7 +312,7 @@ def display_results(text, source_name):
         st.metric("Total", total_sentences)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Generate summary
+    # ===== SUMMARY =====
     if total_sentences < 3:
         summary = text
         summary_words = original_words
@@ -484,40 +320,29 @@ def display_results(text, source_name):
         summary = generate_summary(text, num_points)
         summary_words = len(summary.split())
     
-    # Calculate reduction
+    st.session_state.current_summary = summary
+    
     if original_words > 0:
         reduction = int((1 - summary_words/original_words) * 100)
         reduction = max(0, min(100, reduction))
     else:
         reduction = 0
     
-    # Summary
     st.markdown("## 📋 Summary")
     st.markdown(f"<div class='section-card'>{summary}</div>", unsafe_allow_html=True)
     
-    # Statistics
+    # ===== STATISTICS =====
     col1, col2, col3, col4 = st.columns(4)
-    with col1: 
-        st.markdown(f"<div class='metric-box'><b>Characters</b><br><h2>{original_chars:,}</h2></div>", unsafe_allow_html=True)
-    with col2: 
-        st.markdown(f"<div class='metric-box'><b>Words</b><br><h2>{original_words:,}</h2></div>", unsafe_allow_html=True)
-    with col3: 
-        st.markdown(f"<div class='metric-box'><b>Sentences</b><br><h2>{total_sentences:,}</h2></div>", unsafe_allow_html=True)
-    with col4: 
-        st.markdown(f"<div class='metric-box'><b>Reduced</b><br><h2>{reduction}%</h2></div>", unsafe_allow_html=True)
+    with col1:
+        st.metric("Characters", f"{original_chars:,}")
+    with col2:
+        st.metric("Words", f"{original_words:,}")
+    with col3:
+        st.metric("Sentences", f"{total_sentences:,}")
+    with col4:
+        st.metric("Reduced", f"{reduction}%")
     
-    # Keywords
-    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    if words:
-        keywords = Counter(words).most_common(10)
-        st.markdown("### 🏷️ Keywords")
-        html = "<div>"
-        for word, count in keywords[:8]:
-            html += f"<span class='keyword-tag'>{word} ({count})</span> "
-        html += "</div>"
-        st.markdown(html, unsafe_allow_html=True)
-    
-    # Downloads
+    # ===== DOWNLOADS =====
     st.markdown("### 📥 Downloads")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -530,70 +355,42 @@ def display_results(text, source_name):
             st.audio(audio)
             st.download_button("🔊 Audio", audio, f"{source_name}_audio.mp3")
     
-    # ===== 5 FEATURES =====
-    st.markdown("---")
-    st.markdown("## 🚀 5 Features")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Feature 1: Plagiarism
-        st.markdown("### 🔍 Plagiarism Checker")
-        score, level, css = check_plagiarism(text)
-        st.markdown(f"<div class='{css}'><b>Score:</b> {score}% - {level} Risk</div>", unsafe_allow_html=True)
-        
-        # Feature 2: Timeline
-        st.markdown("### 📅 Timeline Generator")
-        timeline = generate_timeline(text)
-        if timeline:
-            for item in timeline:
-                st.markdown(f"<div class='timeline-item'>{item}</div>", unsafe_allow_html=True)
-        else:
-            st.info("No timeline events detected")
-        
-        # Feature 3: Topics
-        st.markdown("### 🎯 Topic Detection")
-        topics = detect_topics(text)
-        if topics:
-            topic_html = ""
-            for topic, count in topics:
-                topic_html += f"<span class='keyword-tag'>{topic}</span> "
-            st.markdown(topic_html, unsafe_allow_html=True)
-        else:
-            st.info("No topics detected")
-    
-    with col2:
-        # Feature 4: Timestamps
-        st.markdown("### ⏱️ Timestamp Summary")
-        duration = st.slider("Video duration (minutes)", 5, 30, 10, key="duration_slider")
-        timestamps = generate_timestamps(text, duration)
-        for ts in timestamps:
-            st.markdown(f"<div class='timestamp-item'>{ts}</div>", unsafe_allow_html=True)
-        
-        # Feature 5: Key Moments
-        st.markdown("### 🎬 Key Moments")
-        moments = detect_key_moments(text)
-        if moments:
-            for moment in moments:
-                st.markdown(f"<div class='moment-highlight'>{moment}</div>", unsafe_allow_html=True)
-        else:
-            st.info("No key moments detected")
+    # ===== KEYWORDS =====
+    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+    if words:
+        keywords = Counter(words).most_common(10)
+        st.markdown("### 🏷️ Keywords")
+        html = "<div>"
+        for word, count in keywords[:8]:
+            html += f"<span class='keyword-tag'>{word} ({count})</span> "
+        html += "</div>"
+        st.markdown(html, unsafe_allow_html=True)
 
-# ===== MAIN UI =====
+
+# ==================== MAIN UI ====================
 def main():
     tab1, tab2, tab3, tab4 = st.tabs(["📁 File Upload", "🌐 URL/YouTube", "📝 Paste Text", "ℹ️ Help"])
     
+    # ********** TAB 1: FILE UPLOAD **********
     with tab1:
-        uploaded_file = st.file_uploader("Choose file", type=['mp4', 'mp3', 'wav', 'pdf', 'txt', 'avi', 'mov'])
+        uploaded_file = st.file_uploader(
+            "Choose file",
+            type=['mp4', 'avi', 'mov', 'mp3', 'wav', 'm4a', 'pdf', 'txt', 'jpg', 'png', 'jpeg', 'bmp']
+        )
+        
         if uploaded_file:
             file_ext = uploaded_file.name.split('.')[-1].lower()
             file_size = len(uploaded_file.getvalue()) / (1024 * 1024)
             st.info(f"📊 {uploaded_file.name} | {file_size:.2f} MB")
             
+            # Preview for media
             if file_ext in ['mp4', 'avi', 'mov']:
                 st.video(uploaded_file)
-            elif file_ext in ['mp3', 'wav']:
+            elif file_ext in ['mp3', 'wav', 'm4a']:
                 st.audio(uploaded_file)
+            elif file_ext in ['jpg', 'png', 'jpeg', 'bmp']:
+                img = Image.open(uploaded_file)
+                st.image(img, caption="Uploaded Image", use_column_width=True)
             
             if st.button("🚀 Process", key="proc_file"):
                 with st.spinner("Processing..."):
@@ -603,20 +400,34 @@ def main():
                     
                     if file_ext == 'pdf':
                         text = extract_pdf_text(path)
-                        if text: st.success("✅ Extracted PDF"); display_results(text, "pdf")
+                        if text:
+                            st.success("✅ Extracted PDF")
+                            display_results(text, "pdf")
                     elif file_ext == 'txt':
-                        with open(path, 'r', encoding='utf-8') as f: text = f.read()
+                        with open(path, 'r', encoding='utf-8') as f:
+                            text = f.read()
                         display_results(text, "text")
+                    elif file_ext in ['jpg', 'png', 'jpeg', 'bmp']:
+                        text = extract_text_from_image(path)
+                        if text:
+                            st.success("✅ Text extracted from Image using OCR")
+                            display_results(text, "image")
+                        else:
+                            st.error("Could not extract text from image")
                     else:
                         if not st.session_state.assemblyai_key:
-                            st.error("❌ AssemblyAI Key required")
+                            st.error("❌ AssemblyAI Key required for video/audio")
                         else:
                             text = transcribe_with_assemblyai(path)
-                            if text: st.success(f"✅ Transcribed: {len(text)} chars"); display_results(text, "media")
+                            if text:
+                                st.success(f"✅ Transcribed: {len(text)} chars")
+                                display_results(text, "media")
                     os.unlink(path)
     
+    # ********** TAB 2: URL/YOUTUBE **********
     with tab2:
         url = st.text_input("Enter URL", placeholder="https://...")
+        
         if url and st.button("🌐 Fetch", key="fetch_url"):
             if 'youtube.com' in url or 'youtu.be' in url:
                 with st.spinner("Fetching YouTube..."):
@@ -637,6 +448,7 @@ def main():
             else:
                 st.error("Invalid URL")
     
+    # ********** TAB 3: PASTE TEXT **********
     with tab3:
         text_input = st.text_area("Paste text", height=200)
         if text_input and st.button("📝 Summarize", key="summ_text"):
@@ -645,24 +457,24 @@ def main():
             else:
                 st.warning("Text too short")
     
+    # ********** TAB 4: HELP **********
     with tab4:
         st.markdown("""
         <div class='section-card'>
             <h3>📌 How to Use</h3>
             <ol>
-                <li>Add AssemblyAI Key (for video/audio)</li>
-                <li>Upload file, paste URL, or enter text</li>
-                <li>Get summary, stats, keywords, downloads</li>
-                <li>Plus 5 advanced features below!</li>
+                <li>Get AssemblyAI Key from assemblyai.com (for video/audio)</li>
+                <li>Upload file or paste URL</li>
+                <li>Adjust slider for summary length</li>
+                <li>Download text/summary/audio</li>
+                <li><strong>New! Now supports images (JPG, PNG, JPEG, BMP) via OCR</strong></li>
             </ol>
-            
-            <h3>🚀 5 Features</h3>
+            <h3>✅ FIXED & ENHANCED</h3>
             <ul>
-                <li>🔍 Plagiarism Checker</li>
-                <li>📅 Timeline Generator</li>
-                <li>🎯 Topic Detection</li>
-                <li>⏱️ Timestamp Summary</li>
-                <li>🎬 Key Moments Detection</li>
+                <li>✅ URL upload shows correct reduction % (word count based)</li>
+                <li>✅ Video upload respects slider value</li>
+                <li>✅ Image upload & OCR to extract text</li>
+                <li>✅ All input types work same way</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
