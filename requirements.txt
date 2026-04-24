@@ -10,3 +10,4 @@ youtube-transcript-api
 sumy
 pillow
 pytesseract
+tesseract-ocr
